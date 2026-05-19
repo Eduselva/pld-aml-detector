@@ -34,10 +34,28 @@ FEATURE_COLS = [
     "hour_of_day", "day_of_sim", "off_hours",
 ]
 
-AUTOENCODER_LAYERS = [64, 32, 16]
-AUTOENCODER_EPOCHS = 30
+AUTOENCODER_ENCODER_LAYERS = [64, 32, 16]
+AUTOENCODER_LATENT_DIM = 8
+AUTOENCODER_DROPOUT = 0.15
+AUTOENCODER_EPOCHS = 50
 AUTOENCODER_BATCH = 512
-AUTOENCODER_PATIENCE = 5
+AUTOENCODER_PATIENCE = 7
+AUTOENCODER_LR = 1e-3
+
+# Pesos por feature na loss — amplifica features mais discriminativas para AML
+# Features sem peso explícito assumem 1.0
+FEATURE_WEIGHTS: dict[str, float] = {
+    "balance_error":        3.0,
+    "balance_error_ratio":  3.0,
+    "diff_orig":            2.5,
+    "diff_dest":            2.0,
+    "full_drain":           2.5,
+    "orig_zeroed":          2.0,
+    "dest_had_zero":        2.0,
+    "is_fraud_type":        2.0,
+    "amount_ratio_dest":    1.5,
+    "balance_retention_orig": 1.5,
+}
 
 ISO_N_ESTIMATORS = 200
 ISO_MAX_SAMPLES = "auto"
