@@ -36,3 +36,6 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+markers = [
+    "real_data: testes que requerem o dataset PaySim real (use --data para ativar)",
+]
