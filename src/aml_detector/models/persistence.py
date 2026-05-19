@@ -4,34 +4,40 @@ from pathlib import Path
 import joblib
 import numpy as np
 
-from aml_detector.config import MODELS_DIR
+import aml_detector.config as _config
+
+
+def _models_dir() -> Path:
+    return _config.MODELS_DIR
 
 
 def save_artifacts(scaler, ae, threshold: float, metrics: dict) -> Path:
     """Salva scaler, autoencoder, threshold e métricas em MODELS_DIR."""
-    MODELS_DIR.mkdir(exist_ok=True)
+    d = _models_dir()
+    d.mkdir(parents=True, exist_ok=True)
 
-    joblib.dump(scaler, MODELS_DIR / "scaler.joblib")
-    ae.save(MODELS_DIR / "autoencoder.keras")
+    joblib.dump(scaler, d / "scaler.joblib")
+    ae.save(d / "autoencoder.keras")
 
     meta = {
         "threshold": float(threshold),
         "metrics": {k: float(v) for k, v in metrics.items()},
         "model_version": "1.0",
     }
-    (MODELS_DIR / "metadata.json").write_text(json.dumps(meta, indent=2))
+    (d / "metadata.json").write_text(json.dumps(meta, indent=2))
 
-    print(f"Artefatos salvos em {MODELS_DIR}")
-    return MODELS_DIR
+    print(f"Artefatos salvos em {d}")
+    return d
 
 
 def load_artifacts():
     """Carrega scaler, autoencoder e metadata. Lança FileNotFoundError se não existirem."""
     import keras
 
-    scaler_path = MODELS_DIR / "scaler.joblib"
-    ae_path = MODELS_DIR / "autoencoder.keras"
-    meta_path = MODELS_DIR / "metadata.json"
+    d = _models_dir()
+    scaler_path = d / "scaler.joblib"
+    ae_path = d / "autoencoder.keras"
+    meta_path = d / "metadata.json"
 
     for p in (scaler_path, ae_path, meta_path):
         if not p.exists():
@@ -48,7 +54,8 @@ def load_artifacts():
 
 
 def artifacts_exist() -> bool:
+    d = _models_dir()
     return all(
-        (MODELS_DIR / f).exists()
+        (d / f).exists()
         for f in ("scaler.joblib", "autoencoder.keras", "metadata.json")
     )
