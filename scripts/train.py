@@ -19,6 +19,9 @@ from aml_detector.features.engineering import build_features, scale_features
 from aml_detector.models.isolation_forest import train_isolation_forest, iso_scores
 from aml_detector.models.autoencoder import train_autoencoder, reconstruction_errors
 from aml_detector.models.ensemble import find_optimal_threshold, train_low_value_iso, ensemble_predict
+from aml_detector.models.persistence import save_artifacts
+from sklearn.metrics import roc_auc_score
+
 from aml_detector.evaluation.metrics import (
     evaluate_models,
     plot_roc_comparison,
@@ -119,7 +122,20 @@ def main():
         if not args.no_pyvis:
             export_pyvis(G, df_metrics)
 
-    print("\n✓ Pipeline concluído. Outputs em outputs/")
+    # ── 9. Salva artefatos para a API ─────────────────────────────────────
+    print("\n=== 9. Salvando artefatos ===")
+    auc_ae = roc_auc_score(y, scores_ae)
+    auc_iso = roc_auc_score(y, scores_iso)
+    save_artifacts(scaler, ae, best_thr, {
+        "auc_autoencoder": auc_ae,
+        "auc_isolation_forest": auc_iso,
+        "f1_fraud": best_f1,
+    })
+
+    print("\n✓ Pipeline concluído.")
+    print("  → Outputs  : outputs/")
+    print("  → Artefatos: models/")
+    print("  → API      : uvicorn aml_detector.api.app:app --reload")
 
 
 if __name__ == "__main__":
