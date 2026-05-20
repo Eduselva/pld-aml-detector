@@ -15,6 +15,49 @@ def find_optimal_threshold(scores: np.ndarray, y_true: np.ndarray) -> tuple[floa
     return float(thresholds[best_idx]), float(f1_scores[best_idx])
 
 
+def find_thresholds_by_type(
+    scores: np.ndarray,
+    y_true: np.ndarray,
+    types: pd.Series,
+) -> tuple[dict[str, float], float]:
+    """Find optimal threshold per transaction type.
+
+    Returns a dict mapping type -> threshold and a global_threshold fallback
+    for types that have no fraud examples.
+    """
+    global_threshold, _ = find_optimal_threshold(scores, y_true)
+
+    thresholds_by_type: dict[str, float] = {}
+    for tx_type in types.unique():
+        mask = (types == tx_type).values
+        y_type = y_true[mask]
+        if y_type.sum() == 0:
+            continue
+        thr, _ = find_optimal_threshold(scores[mask], y_type)
+        thresholds_by_type[tx_type] = thr
+
+    return thresholds_by_type, global_threshold
+
+
+def predict_with_type_thresholds(
+    scores: np.ndarray,
+    types: pd.Series,
+    thresholds_by_type: dict[str, float],
+    global_threshold: float,
+) -> np.ndarray:
+    """Apply per-type threshold to each transaction.
+
+    Falls back to global_threshold for transaction types not present in
+    thresholds_by_type.
+    """
+    preds = np.zeros(len(scores), dtype=int)
+    type_values = types.values if hasattr(types, "values") else np.array(types)
+    for i, (score, tx_type) in enumerate(zip(scores, type_values)):
+        thr = thresholds_by_type.get(tx_type, global_threshold)
+        preds[i] = int(score > thr)
+    return preds
+
+
 def train_low_value_iso(
     X_scaled: np.ndarray,
     X_df: pd.DataFrame,
