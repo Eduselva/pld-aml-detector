@@ -65,6 +65,50 @@ def weighted_mse(feature_weights: np.ndarray):
     return loss
 
 
+def _train_once(
+    X_normal: np.ndarray,
+    input_dim: int,
+    w_vec: np.ndarray,
+    epochs: int,
+    batch_size: int,
+    patience: int,
+    learning_rate: float,
+    seed: int,
+) -> tuple[keras.Model, object, float]:
+    tf.random.set_seed(seed)
+    np.random.seed(seed)
+    ae = build_autoencoder(input_dim)
+    ae.compile(
+        optimizer=keras.optimizers.Adam(learning_rate=learning_rate),
+        loss=weighted_mse(w_vec),
+    )
+    callbacks = [
+        keras.callbacks.EarlyStopping(
+            monitor="val_loss",
+            patience=patience,
+            restore_best_weights=True,
+            verbose=0,
+        ),
+        keras.callbacks.ReduceLROnPlateau(
+            monitor="val_loss",
+            factor=0.5,
+            patience=3,
+            min_lr=1e-6,
+            verbose=0,
+        ),
+    ]
+    history = ae.fit(
+        X_normal, X_normal,
+        epochs=epochs,
+        batch_size=batch_size,
+        validation_split=0.1,
+        verbose=0,
+        callbacks=callbacks,
+    )
+    best_val_loss = min(history.history["val_loss"])
+    return ae, history, best_val_loss
+
+
 def train_autoencoder(
     X_scaled: np.ndarray,
     y,
@@ -72,57 +116,39 @@ def train_autoencoder(
     batch_size: int = AUTOENCODER_BATCH,
     patience: int = AUTOENCODER_PATIENCE,
     learning_rate: float = AUTOENCODER_LR,
+    n_runs: int = 3,
 ) -> tuple[keras.Model, object]:
     X_normal = X_scaled[y == 0]
     print(f"Treinando Autoencoder em {len(X_normal):,} transações normais...")
     print(f"  Arquitetura : {AUTOENCODER_ENCODER_LAYERS} → latent({AUTOENCODER_LATENT_DIM})")
-    print(f"  Dropout     : {AUTOENCODER_DROPOUT}  |  LR: {learning_rate}")
+    print(f"  Dropout     : {AUTOENCODER_DROPOUT}  |  LR: {learning_rate}  |  runs: {n_runs}")
 
     input_dim = X_scaled.shape[1]
-    ae = build_autoencoder(input_dim)
-
     w_vec = _build_weight_vector()
-    # Garante que o vetor tem o tamanho correto (pode diferir se input_dim != len(FEATURE_COLS))
     if len(w_vec) != input_dim:
         w_vec = np.ones(input_dim, dtype=np.float32)
 
-    ae.compile(
-        optimizer=keras.optimizers.Adam(learning_rate=learning_rate),
-        loss=weighted_mse(w_vec),
-    )
-    ae.summary()
+    best_ae, best_history, best_loss = None, None, float("inf")
+    for i in range(n_runs):
+        seed = RANDOM_SEED + i
+        print(f"  Run {i+1}/{n_runs} (seed={seed})...", end=" ", flush=True)
+        ae, history, val_loss = _train_once(
+            X_normal, input_dim, w_vec, epochs, batch_size, patience, learning_rate, seed
+        )
+        epochs_run = len(history.history["val_loss"])
+        print(f"val_loss={val_loss:.4f}  epochs={epochs_run}")
+        if val_loss < best_loss:
+            best_loss = val_loss
+            best_ae = ae
+            best_history = history
 
-    callbacks = [
-        keras.callbacks.EarlyStopping(
-            monitor="val_loss",
-            patience=patience,
-            restore_best_weights=True,
-            verbose=1,
-        ),
-        keras.callbacks.ReduceLROnPlateau(
-            monitor="val_loss",
-            factor=0.5,
-            patience=3,
-            min_lr=1e-6,
-            verbose=1,
-        ),
-    ]
-
-    history = ae.fit(
-        X_normal, X_normal,
-        epochs=epochs,
-        batch_size=batch_size,
-        validation_split=0.1,
-        verbose=1,
-        callbacks=callbacks,
-    )
-
-    errors = reconstruction_errors(ae, X_scaled)
+    print(f"  ✓ Melhor run: val_loss={best_loss:.4f}")
+    errors = reconstruction_errors(best_ae, X_scaled)
     ratio = errors[y == 1].mean() / (errors[y == 0].mean() + 1e-9)
     print(f"\nErro médio — normais : {errors[y == 0].mean():.4f}")
     print(f"Erro médio — fraudes : {errors[y == 1].mean():.4f}")
     print(f"Razão fraude/normal  : {ratio:.1f}x")
-    return ae, history
+    return best_ae, best_history
 
 
 def reconstruction_errors(ae: keras.Model, X_scaled: np.ndarray, batch_size: int = 1024) -> np.ndarray:
