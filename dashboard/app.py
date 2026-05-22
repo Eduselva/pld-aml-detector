@@ -446,29 +446,30 @@ elif page == "Análise de Grafo":
         gs = load_json("graph_summary.json")
 
         # ── Métricas resumo
-        c1, c2, c3, c4, c5 = st.columns(5)
+        c1, c2, c3, c4 = st.columns(4)
         c1.metric("Nós (contas)", f"{gs['n_nodes']:,}")
         c2.metric("Arestas (transações)", f"{gs['n_edges']:,}")
-        c3.metric("Smurfing (fan-out > 5)", f"{gs['smurfing_fanout']:,}")
-        c4.metric("Aggregation (fan-in > 5)", f"{gs['aggregation_fanin']:,}")
-        c5.metric("Layering (ciclos)", f"{gs['layering_cycles']:,}")
+        c3.metric("Hubs alta centralidade", f"{gs['high_centrality_hubs']:,}")
+        c4.metric("Contas alto risco", f"{gs['high_risk_score']:,}")
 
         st.divider()
 
         # ── Padrões detectados
         col_left, col_right = st.columns([1, 1])
         with col_left:
-            st.subheader("Padrões de lavagem detectados")
-            patterns_df = pd.DataFrame([
-                {"Padrão", "Técnica", "Contas"},
-            ])
+            st.subheader("Padrões de lavagem — resultados")
             data_patterns = {
-                "Padrão": ["Smurfing (fan-out)",     "Aggregation (fan-in)",   "Layering (ciclos)",     "Hubs suspeitos",              "Graph risk > 0.7"],
-                "Técnica": ["Fan-out score > 5",      "Fan-in score > 5",       "SCCs com > 1 nó",       "PageRank top 1%",             "Score composto"],
-                "Contas":  [gs["smurfing_fanout"],    gs["aggregation_fanin"],  gs["layering_cycles"],   gs["high_centrality_hubs"],    gs["high_risk_score"]],
+                "Padrão": ["Smurfing (fan-out > 5)", "Aggregation (fan-in > 5)", "Layering (ciclos)", "Hubs suspeitos (PageRank top 1%)"],
+                "Técnica": ["Fan-out score", "Fan-in score", "SCCs com > 1 nó", "PageRank"],
+                "Contas":  [gs["smurfing_fanout"], gs["aggregation_fanin"], gs["layering_cycles"], gs["high_centrality_hubs"]],
             }
             st.dataframe(pd.DataFrame(data_patterns), use_container_width=True, hide_index=True)
 
+            st.warning(
+                "**PaySim gera transações 1-para-1** — cada conta envia para apenas uma outra "
+                "por transação. Por isso smurfing e layering clássicos não aparecem na estrutura "
+                "do grafo. Em dados reais, esses padrões seriam detectáveis."
+            )
             st.info(
                 f"**{gs['high_centrality_hubs']} hubs de alta centralidade** identificados — "
                 "contas que intermediam muitas transações e têm PageRank no top 1%."

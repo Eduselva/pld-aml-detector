@@ -1,0 +1,9 @@
+{
+  "smurfing_fanout": 0,
+  "aggregation_fanin": 0,
+  "layering_cycles": 0,
+  "high_centrality_hubs": 113,
+  "high_risk_score": 0,
+  "n_nodes": 98100,
+  "n_edges": 50000
+}
