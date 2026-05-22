@@ -2,6 +2,8 @@
 
 Detecção de lavagem de dinheiro com modelos **não supervisionados** aplicados ao dataset sintético PaySim.
 
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://pld-aml-detector-q9nsz4w9et6wqn96ftynjb.streamlit.app/)
+
 > **Objetivo:** Validar o uso de modelos não supervisionados em cenários onde não há labels históricos confiáveis — e documentar de forma transparente onde essa abordagem funciona bem e onde tem limitações.
 
 ---
