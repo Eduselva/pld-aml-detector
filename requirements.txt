@@ -1,0 +1,14 @@
+pandas>=2.0
+numpy>=1.26
+scikit-learn>=1.4
+tensorflow>=2.16
+shap>=0.45
+networkx>=3.2
+matplotlib>=3.8
+seaborn>=0.13
+pyvis>=0.3
+fastapi>=0.111
+uvicorn[standard]>=0.29
+pydantic>=2.7
+pytest>=8.0
+pytest-cov>=5.0
