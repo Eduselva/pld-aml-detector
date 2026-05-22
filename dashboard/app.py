@@ -47,7 +47,7 @@ with st.sidebar:
     page = st.radio(
         "",
         ["Visão Geral", "Detecção por Tipo", "Análise de Erros",
-         "Explicabilidade (SHAP)", "Sobre o Projeto"],
+         "Explicabilidade (SHAP)", "Análise de Grafo", "Sobre o Projeto"],
         label_visibility="collapsed",
     )
     st.divider()
@@ -417,7 +417,91 @@ elif page == "Explicabilidade (SHAP)":
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# PÁGINA 5 — SOBRE O PROJETO
+# PÁGINA 5 — ANÁLISE DE GRAFO
+# ═══════════════════════════════════════════════════════════════════════════════
+
+elif page == "Análise de Grafo":
+    import streamlit.components.v1 as components
+
+    st.title("Análise de Grafo — Rede de Transações Suspeitas")
+    st.markdown(
+        "O grafo mapeia contas como nós e transações como arestas. "
+        "Padrões como **smurfing** (fan-out), **aggregation** (fan-in) e **layering** (ciclos) "
+        "são identificados por métricas de centralidade."
+    )
+    st.divider()
+
+    _graph_summary_path = DATA_DIR / "graph_summary.json"
+    _graph_hubs_path    = DATA_DIR / "graph_top_hubs.csv"
+    _graph_html_path    = DATA_DIR / "graph_interactive.html"
+
+    if not _graph_summary_path.exists():
+        st.warning(
+            "Os dados de grafo ainda não foram exportados. "
+            "Execute a célula de export no notebook Kaggle e faça upload dos arquivos "
+            "`graph_summary.json`, `graph_top_hubs.csv` e `graph_interactive.html` "
+            "para `dashboard/data/`."
+        )
+    else:
+        gs = load_json("graph_summary.json")
+
+        # ── Métricas resumo
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("Nós (contas)", f"{gs['n_nodes']:,}")
+        c2.metric("Arestas (transações)", f"{gs['n_edges']:,}")
+        c3.metric("Smurfing (fan-out > 5)", f"{gs['smurfing_fanout']:,}")
+        c4.metric("Aggregation (fan-in > 5)", f"{gs['aggregation_fanin']:,}")
+        c5.metric("Layering (ciclos)", f"{gs['layering_cycles']:,}")
+
+        st.divider()
+
+        # ── Padrões detectados
+        col_left, col_right = st.columns([1, 1])
+        with col_left:
+            st.subheader("Padrões de lavagem detectados")
+            patterns_df = pd.DataFrame([
+                {"Padrão", "Técnica", "Contas"},
+            ])
+            data_patterns = {
+                "Padrão": ["Smurfing (fan-out)",     "Aggregation (fan-in)",   "Layering (ciclos)",     "Hubs suspeitos",              "Graph risk > 0.7"],
+                "Técnica": ["Fan-out score > 5",      "Fan-in score > 5",       "SCCs com > 1 nó",       "PageRank top 1%",             "Score composto"],
+                "Contas":  [gs["smurfing_fanout"],    gs["aggregation_fanin"],  gs["layering_cycles"],   gs["high_centrality_hubs"],    gs["high_risk_score"]],
+            }
+            st.dataframe(pd.DataFrame(data_patterns), use_container_width=True, hide_index=True)
+
+            st.info(
+                f"**{gs['high_centrality_hubs']} hubs de alta centralidade** identificados — "
+                "contas que intermediam muitas transações e têm PageRank no top 1%."
+            )
+
+        with col_right:
+            st.subheader("Top 10 contas por Graph Risk Score")
+            if _graph_hubs_path.exists():
+                hubs_df = load_csv("graph_top_hubs.csv")
+                display_cols = ["account", "out_degree", "in_degree",
+                                "fan_out_score", "pagerank", "graph_risk_score", "is_fraud"]
+                st.dataframe(
+                    hubs_df[display_cols].head(10).style.background_gradient(
+                        subset=["graph_risk_score"], cmap="Reds", vmin=0, vmax=1
+                    ),
+                    use_container_width=True,
+                )
+
+        # ── Rede interativa PyVis
+        if _graph_html_path.exists():
+            st.divider()
+            st.subheader("Rede Interativa — Top 200 contas suspeitas")
+            st.caption(
+                "Vermelho = conta fraudulenta · Laranja = alto risco (score > 0.6) · "
+                "Azul = normal. Tamanho proporcional ao graph risk score. "
+                "Arraste, zoom e clique nos nós para detalhes."
+            )
+            html_content = _graph_html_path.read_text(encoding="utf-8")
+            components.html(html_content, height=620, scrolling=False)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PÁGINA 6 — SOBRE O PROJETO
 # ═══════════════════════════════════════════════════════════════════════════════
 
 elif page == "Sobre o Projeto":
