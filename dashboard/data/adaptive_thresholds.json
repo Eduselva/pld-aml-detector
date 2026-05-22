@@ -1,0 +1,14 @@
+{
+  "TRANSFER": {
+    "threshold": 0.257249,
+    "f1": 0.766,
+    "precision": 0.631,
+    "recall": 0.974
+  },
+  "CASH_OUT": {
+    "threshold": 0.305686,
+    "f1": 0.586,
+    "precision": 0.609,
+    "recall": 0.565
+  }
+}

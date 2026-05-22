@@ -1,0 +1,22 @@
+{
+  "diff_orig": 20.5,
+  "newbalanceDest": 11.2,
+  "balance_error": 8.1,
+  "oldbalanceOrg": 3.1,
+  "type_enc": 2.8,
+  "log_volume_orig": 1.8,
+  "is_fraud_type": 1.7,
+  "diff_dest": 1.5,
+  "is_transfer": 1.2,
+  "dest_had_zero": 1.0,
+  "orig_to_customer": 0.9,
+  "balance_error_ratio": 0.8,
+  "is_cashout": 0.7,
+  "orig_zeroed": 0.6,
+  "dest_zeroed_after": 0.5,
+  "oldbalanceDest": 0.4,
+  "day_of_sim": 0.3,
+  "step": 0.3,
+  "balance_retention_orig": 0.2,
+  "newbalanceOrig": 0.2
+}

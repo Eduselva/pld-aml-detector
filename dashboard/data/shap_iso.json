@@ -1,0 +1,22 @@
+{
+  "off_hours": 0.28,
+  "orig_zeroed": 0.17,
+  "is_transfer": 0.16,
+  "full_drain": 0.16,
+  "oldbalanceOrg": 0.15,
+  "newbalanceOrig": 0.15,
+  "amount_ratio_dest": 0.14,
+  "day_of_sim": 0.13,
+  "step": 0.12,
+  "balance_retention_orig": 0.11,
+  "dest_zeroed_after": 0.11,
+  "dest_had_zero": 0.11,
+  "oldbalanceDest": 0.1,
+  "newbalanceDest": 0.1,
+  "balance_error_ratio": 0.1,
+  "type_enc": 0.1,
+  "diff_orig": 0.1,
+  "hour_of_day": 0.1,
+  "balance_error": 0.09,
+  "log_amount": 0.09
+}
