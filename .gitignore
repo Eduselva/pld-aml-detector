@@ -11,3 +11,4 @@ build/
 /models/
 /outputs/
 .ipynb_checkpoints/
+.claude/
