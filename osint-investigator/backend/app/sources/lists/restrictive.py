@@ -26,11 +26,37 @@ _OFAC_TTL = timedelta(hours=24)
 
 def normalize_name(name: str) -> str:
     nfkd = unicodedata.normalize("NFKD", name)
-    return "".join(c for c in nfkd if not unicodedata.combining(c)).lower().strip()
+    cleaned = "".join(c for c in nfkd if not unicodedata.combining(c)).lower().strip()
+    # Normalize punctuation common in OFAC entries ("MALUF, Paulo" → "maluf paulo")
+    return " ".join(cleaned.replace(",", " ").replace(".", " ").replace("-", " ").split())
 
 
 def fuzzy_ratio(a: str, b: str) -> float:
     return SequenceMatcher(None, a, b).ratio()
+
+
+def best_match_score(query: str, entry: str) -> float:
+    """Multi-strategy matching: handles partial names, inverted order (OFAC style), substrings."""
+    if not query or not entry:
+        return 0.0
+
+    # Strategy 1: direct fuzzy
+    direct = fuzzy_ratio(query, entry)
+
+    # Strategy 2: token-sort (handles "Paulo Maluf" vs "MALUF, Paulo Salim" → sort tokens)
+    q_sorted = " ".join(sorted(query.split()))
+    e_sorted = " ".join(sorted(entry.split()))
+    token_sort = fuzzy_ratio(q_sorted, e_sorted)
+
+    # Strategy 3: substring containment ("maluf" inside "paulo maluf")
+    substring = 0.90 if (query in entry or entry in query) else 0.0
+
+    # Strategy 4: all query tokens present in entry tokens ("maluf" ⊂ {"paulo","maluf"})
+    q_tokens = set(query.split())
+    e_tokens = set(entry.split())
+    token_subset = 0.88 if (len(q_tokens) >= 1 and q_tokens.issubset(e_tokens)) else 0.0
+
+    return max(direct, token_sort, substring, token_subset)
 
 
 async def _load_ofac_list() -> list[dict]:
@@ -148,7 +174,7 @@ class RestrictiveListsSource(BaseSource):
 
         for entry in ofac_entries:
             entry_norm = normalize_name(entry["name"])
-            ratio = fuzzy_ratio(normalized, entry_norm)
+            ratio = best_match_score(normalized, entry_norm)
             if ratio >= MATCH_THRESHOLD:
                 match_type = "exato" if ratio >= 0.98 else "fuzzy"
                 matches.append({
@@ -170,7 +196,7 @@ class RestrictiveListsSource(BaseSource):
             sources_checked.append("PEP/CGU (API tempo real)")
             for item in cgu_results:
                 item_norm = normalize_name(item["name"])
-                ratio = fuzzy_ratio(normalized, item_norm)
+                ratio = best_match_score(normalized, item_norm)
                 if ratio >= MATCH_THRESHOLD:
                     match_type = "exato" if ratio >= 0.98 else "fuzzy"
                     matches.append({
@@ -192,7 +218,7 @@ class RestrictiveListsSource(BaseSource):
             sources_checked.append(f"PEP/local ({len(local_peps)} entradas)")
             for entry in local_peps:
                 entry_norm = normalize_name(entry.get("name", ""))
-                ratio = fuzzy_ratio(normalized, entry_norm)
+                ratio = best_match_score(normalized, entry_norm)
                 if ratio >= MATCH_THRESHOLD:
                     match_type = "exato" if ratio >= 0.98 else "fuzzy"
                     matches.append({
