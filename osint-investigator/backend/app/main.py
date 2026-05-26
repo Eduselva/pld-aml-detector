@@ -25,6 +25,12 @@ async def lifespan(app: FastAPI):
     logger.info("Inicializando banco de dados...")
     await init_db()
     logger.info("Banco de dados pronto.")
+    # Diagnóstico de motores de busca
+    has_serper = bool(settings.serper_api_key)
+    has_google = bool(settings.google_search_api_key and settings.google_search_cx)
+    logger.info(f"[SEARCH ENGINE] serper={'OK' if has_serper else 'NAO CONFIGURADO'} | google_cse={'OK' if has_google else 'NAO CONFIGURADO'}")
+    if not has_serper and not has_google:
+        logger.warning("[SEARCH ENGINE] Nenhum motor de busca configurado — mídia negativa desativada!")
     yield
     logger.info("Encerrando aplicação.")
 
