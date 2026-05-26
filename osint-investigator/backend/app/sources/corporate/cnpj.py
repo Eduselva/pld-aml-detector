@@ -19,11 +19,18 @@ class CNPJSource(BaseSource):
 
     async def collect(
         self,
-        entity_id: str,
+        entity_id: Optional[str],
         entity_name: str,
         email: Optional[str] = None,
         **kwargs: Any,
     ) -> dict:
+        if not entity_id:
+            return self._make_result(
+                raw_score=0.0,
+                summary="Consulta CNPJ ignorada — nenhum identificador fornecido.",
+                alerts=[],
+                data={"skipped": True},
+            )
         cnpj = entity_id.replace(".", "").replace("/", "").replace("-", "")
 
         try:

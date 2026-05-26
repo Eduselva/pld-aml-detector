@@ -7,45 +7,43 @@ import AlertBadge from '../components/AlertBadge'
 import SourceCard from '../components/SourceCard'
 import StatusBadge from '../components/StatusBadge'
 
-const SOURCE_ORDER = [
-  'cnpj',
-  'negative_media',
-  'restrictive_lists',
-  'social_linkedin',
-  'social_instagram',
-  'social_twitter',
-  'social_tiktok',
-  'hibp',
-]
+const SOURCE_META: Record<string, { label: string; icon: string }> = {
+  cnpj:              { label: 'CNPJ / Receita Federal', icon: '🏢' },
+  negative_media:    { label: 'Mídias Negativas',        icon: '📰' },
+  restrictive_lists: { label: 'Listas PEP/OFAC',         icon: '🚫' },
+  social_linkedin:   { label: 'LinkedIn',                icon: '💼' },
+  social_instagram:  { label: 'Instagram',               icon: '📷' },
+  social_twitter:    { label: 'Twitter / X',             icon: '🐦' },
+  social_tiktok:     { label: 'TikTok',                  icon: '🎵' },
+  hibp:              { label: 'Vazamentos (HIBP)',        icon: '📧' },
+}
+
+const SOURCE_ORDER = Object.keys(SOURCE_META)
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
   })
 }
 
-function formatEntityId(type: string, id: string) {
+function formatEntityId(type: string, id?: string | null) {
+  if (!id) return '—'
   const d = id.replace(/\D/g, '')
-  if (type === 'cpf' && d.length === 11) {
+  if (type === 'cpf' && d.length === 11)
     return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6,9)}-${d.slice(9)}`
-  }
-  if (type === 'cnpj' && d.length === 14) {
+  if (type === 'cnpj' && d.length === 14)
     return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}`
-  }
   return id
 }
 
 function ScoreBreakdown({ score }: { score: NonNullable<DossierReport['risk_score']> }) {
   const items = [
-    { label: 'Corporativo', value: score.corporate, weight: '20%' },
-    { label: 'Mídias Negativas', value: score.media, weight: '35%' },
-    { label: 'Listas Restritivas', value: score.lists, weight: '25%' },
-    { label: 'Redes Sociais', value: score.social, weight: '10%' },
-    { label: 'E-mail', value: score.email, weight: '10%' },
+    { label: 'Corporativo',      value: score.corporate, weight: '20%' },
+    { label: 'Mídias Negativas', value: score.media,     weight: '35%' },
+    { label: 'Listas Restritivas', value: score.lists,   weight: '25%' },
+    { label: 'Redes Sociais',    value: score.social,    weight: '10%' },
+    { label: 'E-mail',           value: score.email,     weight: '10%' },
   ]
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
@@ -80,12 +78,51 @@ function ScoreBreakdown({ score }: { score: NonNullable<DossierReport['risk_scor
   )
 }
 
+function SourceFilter({
+  sources,
+  visible,
+  onChange,
+}: {
+  sources: string[]
+  visible: Set<string>
+  onChange: (name: string) => void
+}) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+        Fontes visíveis no relatório
+      </h3>
+      <div className="flex flex-wrap gap-2">
+        {sources.map((name) => {
+          const meta = SOURCE_META[name] || { label: name, icon: '🔍' }
+          const checked = visible.has(name)
+          return (
+            <button
+              key={name}
+              type="button"
+              onClick={() => onChange(name)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                checked
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+              }`}
+            >
+              {meta.icon} {meta.label}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function Report() {
   const { id } = useParams<{ id: string }>()
   const [investigation, setInvestigation] = useState<Investigation | null>(null)
   const [report, setReport] = useState<DossierReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [visibleSources, setVisibleSources] = useState<Set<string>>(new Set(SOURCE_ORDER))
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const fetchData = useCallback(async () => {
@@ -98,6 +135,8 @@ export default function Report() {
         if (inv.status === 'complete') {
           const rep = await api.getReport(id)
           setReport(rep)
+          // Initialize filter with all returned sources visible
+          setVisibleSources(new Set(rep.sources.map((s) => s.source_name)))
         }
       }
       setError(null)
@@ -113,6 +152,15 @@ export default function Report() {
     pollRef.current = setInterval(fetchData, 3000)
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
   }, [fetchData])
+
+  const toggleSource = (name: string) => {
+    setVisibleSources((prev) => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }
 
   if (loading) {
     return (
@@ -139,10 +187,13 @@ export default function Report() {
   if (!investigation) return null
 
   const isRunning = investigation.status === 'pending' || investigation.status === 'running'
+  const entityLabel = investigation.entity_type === 'apelido'
+    ? 'Apelido'
+    : investigation.entity_type.toUpperCase()
+  const entityIdFormatted = formatEntityId(investigation.entity_type, investigation.entity_id)
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -152,7 +203,8 @@ export default function Report() {
             <div>
               <h1 className="text-lg font-bold text-gray-900">{investigation.entity_name}</h1>
               <p className="text-xs text-gray-500">
-                {investigation.entity_type.toUpperCase()} · {formatEntityId(investigation.entity_type, investigation.entity_id)}
+                {entityLabel}
+                {entityIdFormatted !== '—' && ` · ${entityIdFormatted}`}
                 {investigation.email && ` · ${investigation.email}`}
               </p>
             </div>
@@ -172,20 +224,16 @@ export default function Report() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
-        {/* Running state */}
         {isRunning && (
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-6 flex items-center gap-4">
             <div className="w-10 h-10 border-3 border-blue-600 border-t-transparent rounded-full animate-spin flex-shrink-0"></div>
             <div>
               <p className="font-semibold text-blue-800">Investigação em andamento</p>
-              <p className="text-sm text-blue-600 mt-0.5">
-                Coletando dados de múltiplas fontes em paralelo. Aguarde...
-              </p>
+              <p className="text-sm text-blue-600 mt-0.5">Coletando dados de múltiplas fontes em paralelo. Aguarde...</p>
             </div>
           </div>
         )}
 
-        {/* Failed state */}
         {investigation.status === 'failed' && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-6 mb-6">
             <p className="font-semibold text-red-800">Investigação falhou</p>
@@ -195,33 +243,27 @@ export default function Report() {
           </div>
         )}
 
-        {/* Report content */}
         {report && (
           <div className="space-y-6">
-            {/* Score hero section */}
+            {/* Score */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              {/* Gauge */}
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex flex-col items-center justify-center">
                 {report.risk_score ? (
                   <>
                     <p className="text-xs font-semibold uppercase text-gray-500 tracking-wide mb-2">Score de Risco</p>
                     <RiskGauge score={report.risk_score.total} level={report.risk_score.level} size={180} />
-                    <p className="text-xs text-gray-400 mt-2">
-                      Investigado em {formatDate(report.created_at)}
-                    </p>
+                    <p className="text-xs text-gray-400 mt-2">Investigado em {formatDate(report.created_at)}</p>
                   </>
                 ) : (
                   <p className="text-gray-400">Score não disponível</p>
                 )}
               </div>
-
-              {/* Score breakdown */}
               <div className="md:col-span-2">
                 {report.risk_score && <ScoreBreakdown score={report.risk_score} />}
               </div>
             </div>
 
-            {/* Alerts section */}
+            {/* Alerts */}
             {report.alerts.length > 0 && (
               <div>
                 <h2 className="text-base font-bold text-gray-800 mb-3">
@@ -229,22 +271,28 @@ export default function Report() {
                 </h2>
                 <div className="space-y-2">
                   {report.alerts.slice(0, 10).map((alert, i) => (
-                    <AlertBadge
-                      key={i}
-                      severity={alert.severity}
-                      message={alert.message}
-                      source={alert.source}
-                    />
+                    <AlertBadge key={i} severity={alert.severity} message={alert.message} source={alert.source} />
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Sources section */}
+            {/* Source filter */}
+            <SourceFilter
+              sources={[...report.sources]
+                .sort((a, b) => {
+                  const ia = SOURCE_ORDER.indexOf(a.source_name)
+                  const ib = SOURCE_ORDER.indexOf(b.source_name)
+                  return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib)
+                })
+                .map((s) => s.source_name)}
+              visible={visibleSources}
+              onChange={toggleSource}
+            />
+
+            {/* Sources */}
             <div>
-              <h2 className="text-base font-bold text-gray-800 mb-3">
-                Fontes de Dados
-              </h2>
+              <h2 className="text-base font-bold text-gray-800 mb-3">Fontes de Dados</h2>
               <div className="space-y-3">
                 {[...report.sources]
                   .sort((a, b) => {
@@ -252,9 +300,15 @@ export default function Report() {
                     const ib = SOURCE_ORDER.indexOf(b.source_name)
                     return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib)
                   })
+                  .filter((s) => visibleSources.has(s.source_name))
                   .map((source) => (
                     <SourceCard key={source.source_name} source={source} />
                   ))}
+                {[...report.sources].filter((s) => visibleSources.has(s.source_name)).length === 0 && (
+                  <p className="text-sm text-gray-400 text-center py-6">
+                    Nenhuma fonte selecionada. Use os filtros acima para exibir os resultados.
+                  </p>
+                )}
               </div>
             </div>
 

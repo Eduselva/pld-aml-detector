@@ -1,6 +1,6 @@
 export type InvestigationStatus = 'pending' | 'running' | 'complete' | 'failed'
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical'
-export type EntityType = 'cpf' | 'cnpj'
+export type EntityType = 'cpf' | 'cnpj' | 'apelido'
 export type AlertSeverity = 'info' | 'warning' | 'danger' | 'critical'
 
 export interface Investigation {
@@ -27,7 +27,7 @@ export interface InvestigationListResponse {
 export interface InvestigationCreate {
   entity_name: string
   entity_type: EntityType
-  entity_id: string
+  entity_id?: string | null
   email?: string
   phone?: string | null
   nickname?: string | null

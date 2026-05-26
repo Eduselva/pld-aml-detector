@@ -6,8 +6,8 @@ import re
 
 class InvestigationCreate(BaseModel):
     entity_name: str
-    entity_type: str  # "cpf" or "cnpj"
-    entity_id: str
+    entity_type: str  # "cpf", "cnpj", or "apelido"
+    entity_id: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
     nickname: Optional[str] = None
@@ -15,14 +15,15 @@ class InvestigationCreate(BaseModel):
     @field_validator("entity_type")
     @classmethod
     def validate_entity_type(cls, v: str) -> str:
-        if v not in ("cpf", "cnpj"):
-            raise ValueError("entity_type must be 'cpf' or 'cnpj'")
+        if v not in ("cpf", "cnpj", "apelido"):
+            raise ValueError("entity_type must be 'cpf', 'cnpj', or 'apelido'")
         return v
 
-    @field_validator("entity_id")
+    @field_validator("entity_id", mode="before")
     @classmethod
-    def validate_entity_id(cls, v: str) -> str:
-        # Strip formatting chars
+    def validate_entity_id(cls, v: Optional[str]) -> Optional[str]:
+        if not v:
+            return None
         cleaned = re.sub(r"[.\-/]", "", v)
         if not cleaned.isdigit():
             raise ValueError("entity_id must contain only digits (and optional formatting)")
@@ -43,7 +44,7 @@ class InvestigationResponse(BaseModel):
     updated_at: datetime
     status: str
     entity_type: str
-    entity_id: str
+    entity_id: Optional[str] = None
     entity_name: str
     email: Optional[str] = None
     phone: Optional[str] = None

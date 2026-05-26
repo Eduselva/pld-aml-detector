@@ -18,7 +18,7 @@ class Investigation(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending/running/complete/failed
     entity_type: Mapped[str] = mapped_column(String(10))  # cpf/cnpj
-    entity_id: Mapped[str] = mapped_column(String(20))
+    entity_id: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     entity_name: Mapped[str] = mapped_column(String(255))
     email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     phone: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
