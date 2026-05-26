@@ -152,6 +152,19 @@ Opcional (para mais consultas ao HIBP):
 HIBP_API_KEY=sua_chave_aqui
 ```
 
+**Recomendado — Google Custom Search (mídias negativas muito mais precisas):**
+```
+GOOGLE_SEARCH_API_KEY=sua_chave_aqui
+GOOGLE_SEARCH_CX=seu_cx_aqui
+```
+
+Como obter:
+1. Acesse **console.developers.google.com** → crie um projeto → ative "Custom Search API"
+2. Em **Credentials** → crie uma API Key → copie como `GOOGLE_SEARCH_API_KEY`
+3. Acesse **programmablesearchengine.google.com** → crie um buscador (marque "Search the entire web") → copie o **Search engine ID** como `GOOGLE_SEARCH_CX`
+
+Plano gratuito: 100 buscas/dia (suficiente para uso moderado). Sem essa configuração, a ferramenta usa DuckDuckGo como fallback.
+
 ### 5. Gere a URL pública
 - Vá em **"Settings"** → **"Networking"** → **"Generate Domain"**
 - Pronto — a ferramenta estará acessível em `https://seu-projeto.up.railway.app`

@@ -1,20 +1,23 @@
 import logging
 import re
 import unicodedata
-from typing import Optional, Any
 from urllib.parse import urlencode, unquote
 
 import httpx
 from bs4 import BeautifulSoup
 
 from app.sources.base import BaseSource
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
 DDG_URL = "https://html.duckduckgo.com/html/"
+GOOGLE_URL = "https://www.googleapis.com/customsearch/v1"
 
-FRAUD_TERMS_PT = "fraude OR golpe OR estelionato OR \"lavagem de dinheiro\" OR COAF OR investigado OR preso OR condenado OR corrupção OR desvio"
-FRAUD_TERMS_EN = "fraud OR scam OR \"money laundering\" OR arrested OR corruption"
+# Individual fraud terms — used to build simple per-term queries
+FRAUD_TERMS_PT = ["fraude", "golpe", "estelionato", "lavagem de dinheiro", "COAF",
+                  "preso", "condenado", "investigado", "corrupção", "operação policial"]
+FRAUD_TERMS_EN = ["fraud", "scam", "money laundering", "arrested", "corruption"]
 
 
 def _remove_accents(text: str) -> str:
@@ -22,25 +25,33 @@ def _remove_accents(text: str) -> str:
     return "".join(c for c in nfkd if not unicodedata.combining(c))
 
 
-def _build_queries(name: str, nickname: Optional[str]) -> list[tuple[str, str]]:
-    """Return list of (label, query) tuples to run."""
-    queries = []
-    # Exact name with fraud terms
-    queries.append(("name_fraud_pt", f'"{name}" ({FRAUD_TERMS_PT})'))
-    # Name without accents (catches different spellings)
-    name_no_accent = _remove_accents(name)
-    if name_no_accent != name:
-        queries.append(("name_no_accent", f'"{name_no_accent}" ({FRAUD_TERMS_PT})'))
-    # First + last name only (broader match for compound names)
+def _name_variants(name: str, nickname: str | None) -> list[str]:
+    """Return search name variants to try."""
+    variants = [name]
+    no_accent = _remove_accents(name)
+    if no_accent != name:
+        variants.append(no_accent)
     parts = name.strip().split()
     if len(parts) >= 3:
-        short_name = f"{parts[0]} {parts[-1]}"
-        queries.append(("short_name_fraud", f'"{short_name}" ({FRAUD_TERMS_PT})'))
-    # English terms
-    queries.append(("name_fraud_en", f'"{name}" ({FRAUD_TERMS_EN})'))
-    # Nickname queries
+        variants.append(f"{parts[0]} {parts[-1]}")
     if nickname and nickname.strip():
-        queries.append(("nickname_fraud_pt", f'"{nickname.strip()}" ({FRAUD_TERMS_PT})'))
+        variants.append(nickname.strip())
+        no_acc_nick = _remove_accents(nickname.strip())
+        if no_acc_nick != nickname.strip():
+            variants.append(no_acc_nick)
+    return list(dict.fromkeys(variants))  # deduplicate preserving order
+
+
+def _build_queries(name: str, nickname: str | None) -> list[str]:
+    """Build simple human-like queries — one name variant + one term at a time."""
+    variants = _name_variants(name, nickname)
+    queries = []
+    # For each variant, search with a combined PT block and EN block
+    for variant in variants:
+        pt_block = " OR ".join(f'"{t}"' if " " in t else t for t in FRAUD_TERMS_PT)
+        queries.append(f'"{variant}" ({pt_block})')
+        en_block = " OR ".join(f'"{t}"' if " " in t else t for t in FRAUD_TERMS_EN)
+        queries.append(f'"{variant}" ({en_block})')
     return queries
 
 
@@ -48,34 +59,38 @@ class NegativeMediaSource(BaseSource):
     source_name = "negative_media"
     timeout = 15.0
 
-    async def collect(self, entity_id: str, entity_name: str, email=None, nickname=None, phone=None, **kwargs) -> dict:
+    async def collect(self, entity_id: str, entity_name: str, email=None,
+                      nickname=None, phone=None, **kwargs) -> dict:
+        use_google = bool(settings.google_search_api_key and settings.google_search_cx)
         queries = _build_queries(entity_name, nickname)
+
         all_results: list[dict] = []
         seen_urls: set[str] = set()
         errors = []
         queries_run = []
+        engine_used = "google" if use_google else "duckduckgo"
 
-        for label, query in queries:
+        for query in queries:
             try:
-                results = await self._ddg_search(query)
+                if use_google:
+                    results = await self._google_search(query)
+                else:
+                    results = await self._ddg_search(query)
                 queries_run.append(query)
                 for r in results:
                     if r["url"] not in seen_urls:
                         all_results.append(r)
                         seen_urls.add(r["url"])
             except Exception as e:
-                logger.warning(f"Search [{label}] failed: {e}")
-                errors.append(f"{label}: {str(e)}")
+                logger.warning(f"Search failed [{query[:50]}]: {e}")
+                errors.append(str(e))
 
         raw_score, alerts = self._compute_score(all_results)
         num = len(all_results)
-
-        if num == 0:
-            summary = "Nenhuma mídia negativa encontrada."
-        elif num == 1:
-            summary = "1 resultado de mídia negativa encontrado."
-        else:
-            summary = f"{num} resultados de mídia negativa encontrados."
+        summary = (
+            "Nenhuma mídia negativa encontrada." if num == 0
+            else f"{num} resultado(s) de mídia negativa encontrado(s)."
+        )
 
         return self._make_result(
             raw_score=raw_score,
@@ -84,11 +99,40 @@ class NegativeMediaSource(BaseSource):
             data={
                 "total_results": num,
                 "results": all_results[:20],
+                "engine_used": engine_used,
                 "queries_run": queries_run,
                 "nickname_searched": bool(nickname),
                 "errors": errors,
             },
         )
+
+    async def _google_search(self, query: str) -> list[dict]:
+        params = {
+            "key": settings.google_search_api_key,
+            "cx": settings.google_search_cx,
+            "q": query,
+            "lr": "lang_pt",
+            "num": 10,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                resp = await client.get(GOOGLE_URL, params=params)
+            if resp.status_code != 200:
+                logger.warning(f"Google CSE returned {resp.status_code}")
+                return []
+            data = resp.json()
+            results = []
+            for item in data.get("items", []):
+                results.append({
+                    "title": item.get("title", ""),
+                    "snippet": item.get("snippet", ""),
+                    "url": item.get("link", ""),
+                    "display_url": item.get("displayLink", ""),
+                })
+            return results
+        except Exception as e:
+            logger.exception(f"Google CSE error: {e}")
+            return []
 
     async def _ddg_search(self, query: str) -> list[dict]:
         headers = {
@@ -100,10 +144,10 @@ class NegativeMediaSource(BaseSource):
         }
         payload = urlencode({"q": query, "b": "", "kl": "br-pt"})
         try:
-            async with httpx.AsyncClient(timeout=self.timeout, headers=headers, follow_redirects=True) as client:
+            async with httpx.AsyncClient(timeout=self.timeout, headers=headers,
+                                         follow_redirects=True) as client:
                 resp = await client.post(DDG_URL, content=payload)
             if resp.status_code != 200:
-                logger.warning(f"DDG returned {resp.status_code} for query: {query[:60]}")
                 return []
             return self._parse_ddg_html(resp.text)
         except Exception as e:
@@ -113,10 +157,10 @@ class NegativeMediaSource(BaseSource):
     def _parse_ddg_html(self, html: str) -> list[dict]:
         soup = BeautifulSoup(html, "html.parser")
         results = []
-        for result_div in soup.select(".result"):
-            title_el = result_div.select_one(".result__title a")
-            snippet_el = result_div.select_one(".result__snippet")
-            url_el = result_div.select_one(".result__url")
+        for div in soup.select(".result"):
+            title_el = div.select_one(".result__title a")
+            snippet_el = div.select_one(".result__snippet")
+            url_el = div.select_one(".result__url")
             if not title_el:
                 continue
             title = title_el.get_text(strip=True)
@@ -124,11 +168,12 @@ class NegativeMediaSource(BaseSource):
             url = title_el.get("href", "")
             display_url = url_el.get_text(strip=True) if url_el else ""
             if url.startswith("//duckduckgo.com/l/?"):
-                url_match = re.search(r"uddg=([^&]+)", url)
-                if url_match:
-                    url = unquote(url_match.group(1))
+                m = re.search(r"uddg=([^&]+)", url)
+                if m:
+                    url = unquote(m.group(1))
             if title and url:
-                results.append({"title": title, "snippet": snippet, "url": url, "display_url": display_url})
+                results.append({"title": title, "snippet": snippet,
+                                 "url": url, "display_url": display_url})
         return results
 
     def _compute_score(self, results: list[dict]) -> tuple[float, list]:
@@ -138,12 +183,12 @@ class NegativeMediaSource(BaseSource):
         score = 30.0 if num <= 2 else 60.0 if num <= 5 else 90.0
         severity = "warning" if num <= 2 else "danger" if num <= 5 else "critical"
         alerts = [self._make_alert(severity, f"{num} resultado(s) de mídia negativa encontrado(s)")]
-
-        serious_keywords = ["lavagem", "coaf", "preso", "condenado", "operação", "fraude", "golpe", "estelionato"]
+        serious_kw = ["lavagem", "coaf", "preso", "condenado", "operação",
+                      "fraude", "golpe", "estelionato"]
         hits = set()
         for r in results:
             text = (r.get("title", "") + " " + r.get("snippet", "")).lower()
-            for kw in serious_keywords:
+            for kw in serious_kw:
                 if kw in text:
                     hits.add(kw)
         if hits:
