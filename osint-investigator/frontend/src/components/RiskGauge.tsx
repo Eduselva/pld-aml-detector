@@ -20,7 +20,7 @@ function getColor(level: RiskLevel): { stroke: string; text: string; label: stri
 }
 
 export default function RiskGauge({ score, level, size = 160 }: Props) {
-  const { stroke, text, label } = getColor(level)
+  const { stroke, label } = getColor(level)
   const radius = 54
   const strokeWidth = 10
   const circumference = 2 * Math.PI * radius

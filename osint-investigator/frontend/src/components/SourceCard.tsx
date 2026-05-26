@@ -50,13 +50,13 @@ function ScoreBar({ score }: { score: number }) {
 function CNPJData({ data }: { data: Record<string, unknown> }) {
   return (
     <div className="space-y-2 text-sm">
-      {data.razao_social && (
+      {data.razao_social != null && (
         <div className="grid grid-cols-2 gap-x-4">
           <span className="text-gray-500">Razão Social</span>
           <span className="font-medium">{String(data.razao_social)}</span>
         </div>
       )}
-      {data.situacao_cadastral && (
+      {data.situacao_cadastral != null && (
         <div className="grid grid-cols-2 gap-x-4">
           <span className="text-gray-500">Situação</span>
           <span className={`font-medium ${String(data.situacao_cadastral).includes('ATIVA') ? 'text-green-700' : 'text-red-700'}`}>
@@ -64,25 +64,25 @@ function CNPJData({ data }: { data: Record<string, unknown> }) {
           </span>
         </div>
       )}
-      {data.data_inicio_atividade && (
+      {data.data_inicio_atividade != null && (
         <div className="grid grid-cols-2 gap-x-4">
           <span className="text-gray-500">Abertura</span>
           <span>{String(data.data_inicio_atividade)}</span>
         </div>
       )}
-      {data.atividade_principal && (
+      {data.atividade_principal != null && (
         <div className="grid grid-cols-2 gap-x-4">
           <span className="text-gray-500">Atividade</span>
           <span>{String(data.atividade_principal)}</span>
         </div>
       )}
-      {data.municipio && (
+      {data.municipio != null && (
         <div className="grid grid-cols-2 gap-x-4">
           <span className="text-gray-500">Município</span>
           <span>{data.municipio as string}/{data.uf as string}</span>
         </div>
       )}
-      {data.capital_social !== undefined && (
+      {data.capital_social != null && (
         <div className="grid grid-cols-2 gap-x-4">
           <span className="text-gray-500">Capital Social</span>
           <span>R$ {Number(data.capital_social).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
