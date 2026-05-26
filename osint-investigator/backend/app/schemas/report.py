@@ -32,7 +32,7 @@ class DossierReport(BaseModel):
     investigation_id: str
     entity_name: str
     entity_type: str
-    entity_id: str
+    entity_id: Optional[str] = None
     email: Optional[str] = None
     status: str
     created_at: datetime
