@@ -80,7 +80,12 @@ class NegativeMediaSource(BaseSource):
 
         for query in queries:
             try:
-                results = await self._google_search(query)
+                results, err = await self._google_search(query)
+                if err:
+                    errors.append(err)
+                    if not any("Google CSE HTTP" in e for e in errors[:-1]):
+                        # log only first unique API error to avoid spam
+                        logger.warning(f"Google CSE error on query [{query[:50]}]: {err}")
                 queries_run.append(query)
                 for r in results:
                     if r["url"] not in seen_urls:
@@ -111,7 +116,7 @@ class NegativeMediaSource(BaseSource):
             },
         )
 
-    async def _google_search(self, query: str) -> list[dict]:
+    async def _google_search(self, query: str) -> tuple[list[dict], str | None]:
         params = {
             "key": settings.google_search_api_key,
             "cx": settings.google_search_cx,
@@ -123,8 +128,14 @@ class NegativeMediaSource(BaseSource):
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 resp = await client.get(GOOGLE_URL, params=params)
             if resp.status_code != 200:
-                logger.warning(f"Google CSE returned {resp.status_code}")
-                return []
+                error_msg = f"Google CSE HTTP {resp.status_code}"
+                try:
+                    body = resp.json()
+                    error_msg += f": {body.get('error', {}).get('message', '')}"
+                except Exception:
+                    pass
+                logger.warning(error_msg)
+                return [], error_msg
             data = resp.json()
             results = []
             for item in data.get("items", []):
@@ -134,10 +145,10 @@ class NegativeMediaSource(BaseSource):
                     "url": item.get("link", ""),
                     "display_url": item.get("displayLink", ""),
                 })
-            return results
+            return results, None
         except Exception as e:
             logger.exception(f"Google CSE error: {e}")
-            return []
+            return [], str(e)
 
     async def _ddg_search(self, query: str) -> list[dict]:
         headers = {
