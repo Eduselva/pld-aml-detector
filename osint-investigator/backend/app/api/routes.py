@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 
@@ -13,9 +13,29 @@ from app.schemas.report import DossierReport, RiskScore, SourceFinding, Alert
 router = APIRouter(prefix="/api/v1", tags=["investigations"])
 
 
+def _dispatch(investigation_id: str):
+    """Try Celery first; fall back to inline async execution via BackgroundTasks."""
+    try:
+        from app.workers.celery_app import celery_app
+        # Ping the broker to check availability before dispatching
+        celery_app.control.inspect(timeout=1).ping()
+        from app.workers.tasks import run_investigation
+        run_investigation.delay(investigation_id)
+        return True
+    except Exception:
+        return False
+
+
+async def _run_inline(investigation_id: str):
+    """Run investigation directly in the FastAPI process (no Redis/Celery needed)."""
+    from app.workers.tasks import _run_investigation_async
+    await _run_investigation_async(investigation_id)
+
+
 @router.post("/investigations", response_model=InvestigationResponse, status_code=status.HTTP_201_CREATED)
 async def create_investigation(
     payload: InvestigationCreate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
     investigation = Investigation(
@@ -32,14 +52,9 @@ async def create_investigation(
     await db.commit()
     await db.refresh(investigation)
 
-    # Dispatch Celery task
-    try:
-        from app.workers.tasks import run_investigation
-        run_investigation.delay(investigation.id)
-    except Exception as e:
-        investigation.status = "failed"
-        investigation.error_message = f"Failed to dispatch task: {str(e)}"
-        await db.commit()
+    # Try Celery; if unavailable run inline as FastAPI background task
+    if not _dispatch(investigation.id):
+        background_tasks.add_task(_run_inline, investigation.id)
 
     return investigation
 
