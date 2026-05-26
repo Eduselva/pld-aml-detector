@@ -52,6 +52,13 @@ class ScoringEngine:
         )
         total = min(max(total, 0.0), 100.0)
 
+        # Exact match on restrictive lists (PEP/OFAC) is always at least "high"
+        if aggregated.get("lists", 0.0) >= 100.0:
+            total = max(total, 51.0)
+        # Fuzzy match on lists is always at least "medium"
+        elif aggregated.get("lists", 0.0) >= 70.0:
+            total = max(total, 26.0)
+
         risk_level = self._score_to_level(total)
         return round(total, 2), risk_level
 
