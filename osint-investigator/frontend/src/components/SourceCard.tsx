@@ -107,24 +107,39 @@ function CNPJData({ data }: { data: Record<string, unknown> }) {
 
 function MediaData({ data }: { data: Record<string, unknown> }) {
   const results = (data.results as Array<{ title: string; snippet: string; url: string }>) || []
-  if (results.length === 0) {
-    return <p className="text-sm text-gray-500">Nenhum resultado encontrado.</p>
-  }
+  const errors = (data.errors as string[]) || []
+  const engine = data.engine_used as string | undefined
+
   return (
     <div className="space-y-3">
-      {results.map((r, i) => (
-        <div key={i} className="border-l-2 border-gray-200 pl-3">
-          <a
-            href={r.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm font-medium text-blue-600 hover:underline line-clamp-2"
-          >
-            {r.title}
-          </a>
-          {r.snippet && <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">{r.snippet}</p>}
+      {engine && (
+        <p className="text-xs text-gray-400">Motor de busca: {engine}</p>
+      )}
+      {errors.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded p-3">
+          <p className="text-xs font-semibold text-red-700 mb-1">Erros na busca:</p>
+          {errors.slice(0, 3).map((e, i) => (
+            <p key={i} className="text-xs text-red-600">{e}</p>
+          ))}
         </div>
-      ))}
+      )}
+      {results.length === 0 ? (
+        <p className="text-sm text-gray-500">Nenhum resultado encontrado.</p>
+      ) : (
+        results.map((r, i) => (
+          <div key={i} className="border-l-2 border-gray-200 pl-3">
+            <a
+              href={r.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-medium text-blue-600 hover:underline line-clamp-2"
+            >
+              {r.title}
+            </a>
+            {r.snippet && <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">{r.snippet}</p>}
+          </div>
+        ))
+      )}
     </div>
   )
 }
