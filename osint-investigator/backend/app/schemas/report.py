@@ -1,0 +1,41 @@
+from pydantic import BaseModel
+from typing import Optional, Any
+from datetime import datetime
+
+
+class SourceFinding(BaseModel):
+    source_name: str
+    status: str
+    findings: Optional[dict[str, Any]] = None
+    risk_contribution: float
+    collected_at: Optional[datetime] = None
+    error_message: Optional[str] = None
+
+
+class RiskScore(BaseModel):
+    total: float
+    level: str  # low/medium/high/critical
+    corporate: float
+    media: float
+    lists: float
+    social: float
+    email: float
+
+
+class Alert(BaseModel):
+    severity: str  # info/warning/danger/critical
+    message: str
+    source: str
+
+
+class DossierReport(BaseModel):
+    investigation_id: str
+    entity_name: str
+    entity_type: str
+    entity_id: str
+    email: Optional[str] = None
+    status: str
+    created_at: datetime
+    risk_score: Optional[RiskScore] = None
+    alerts: list[Alert] = []
+    sources: list[SourceFinding] = []
