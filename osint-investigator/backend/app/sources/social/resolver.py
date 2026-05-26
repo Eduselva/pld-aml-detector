@@ -21,6 +21,7 @@ def extract_username_from_email(email: str) -> Optional[str]:
 def generate_candidate_usernames(
     entity_name: str,
     email: Optional[str] = None,
+    nickname: Optional[str] = None,
 ) -> list[str]:
     """
     Generate a ranked list of candidate usernames from name and email.
@@ -57,6 +58,17 @@ def generate_candidate_usernames(
         mid_initial = middle_parts[0][0] if middle_parts[0] else ""
         if mid_initial:
             candidates.append(f"{first}{mid_initial}{last}")   # joaomsilva
+
+    # From nickname
+    if nickname and nickname.strip():
+        nick = nickname.strip()
+        nick_lower = nick.lower().replace(" ", "")
+        nick_dot = nick.lower().replace(" ", ".")
+        nick_underscore = nick.lower().replace(" ", "_")
+        nick_normalized = normalize_part(nick)
+        for nc in [nick_lower, nick_dot, nick_underscore, nick_normalized]:
+            if nc and nc not in candidates:
+                candidates.append(nc)
 
     # From email
     if email:

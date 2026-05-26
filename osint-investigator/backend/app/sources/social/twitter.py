@@ -18,9 +18,10 @@ class TwitterSource(BaseSource):
         entity_id: str,
         entity_name: str,
         email: Optional[str] = None,
+        nickname: Optional[str] = None,
         **kwargs: Any,
     ) -> dict:
-        candidates = generate_candidate_usernames(entity_name, email)
+        candidates = generate_candidate_usernames(entity_name, email, nickname=nickname)
         found_profiles = []
         checked = []
         error = None

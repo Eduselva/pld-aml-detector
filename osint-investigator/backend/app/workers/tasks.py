@@ -67,9 +67,11 @@ async def _run_investigation_async(investigation_id: str):
         entity_type = investigation.entity_type
         entity_id = investigation.entity_id
         email = investigation.email
+        phone = investigation.phone
+        nickname = investigation.nickname
 
     # Run all sources concurrently
-    source_tasks = _build_source_tasks(entity_name, entity_type, entity_id, email)
+    source_tasks = _build_source_tasks(entity_name, entity_type, entity_id, email, nickname=nickname, phone=phone)
 
     source_findings = {}
     async def run_source(source_name: str, coro):
@@ -128,7 +130,7 @@ async def _run_investigation_async(investigation_id: str):
         logger.info(f"Investigation {investigation_id} complete. Score: {total_score:.1f} ({risk_level})")
 
 
-def _build_source_tasks(entity_name: str, entity_type: str, entity_id: str, email: Optional[str]):
+def _build_source_tasks(entity_name: str, entity_type: str, entity_id: str, email: Optional[str], nickname: Optional[str] = None, phone: Optional[str] = None):
     """Build list of (source_name, coroutine) tuples."""
     from app.sources.corporate.cnpj import CNPJSource
     from app.sources.media.negative_media import NegativeMediaSource
@@ -147,7 +149,7 @@ def _build_source_tasks(entity_name: str, entity_type: str, entity_id: str, emai
         # For CPF (individuals), skip CNPJ source
         tasks.append(("cnpj", _empty_source("cnpj")))
 
-    tasks.append(("negative_media", NegativeMediaSource().collect(entity_id=entity_id, entity_name=entity_name)))
+    tasks.append(("negative_media", NegativeMediaSource().collect(entity_id=entity_id, entity_name=entity_name, nickname=nickname, phone=phone)))
     tasks.append(("restrictive_lists", RestrictiveListsSource().collect(entity_id=entity_id, entity_name=entity_name)))
 
     if email:
@@ -155,10 +157,10 @@ def _build_source_tasks(entity_name: str, entity_type: str, entity_id: str, emai
     else:
         tasks.append(("hibp", _empty_source("hibp")))
 
-    tasks.append(("social_linkedin", LinkedInSource().collect(entity_id=entity_id, entity_name=entity_name)))
-    tasks.append(("social_instagram", InstagramSource().collect(entity_id=entity_id, entity_name=entity_name, email=email)))
-    tasks.append(("social_twitter", TwitterSource().collect(entity_id=entity_id, entity_name=entity_name, email=email)))
-    tasks.append(("social_tiktok", TikTokSource().collect(entity_id=entity_id, entity_name=entity_name, email=email)))
+    tasks.append(("social_linkedin", LinkedInSource().collect(entity_id=entity_id, entity_name=entity_name, nickname=nickname)))
+    tasks.append(("social_instagram", InstagramSource().collect(entity_id=entity_id, entity_name=entity_name, email=email, nickname=nickname)))
+    tasks.append(("social_twitter", TwitterSource().collect(entity_id=entity_id, entity_name=entity_name, email=email, nickname=nickname)))
+    tasks.append(("social_tiktok", TikTokSource().collect(entity_id=entity_id, entity_name=entity_name, email=email, nickname=nickname)))
 
     return tasks
 

@@ -9,6 +9,8 @@ class InvestigationCreate(BaseModel):
     entity_type: str  # "cpf" or "cnpj"
     entity_id: str
     email: Optional[str] = None
+    phone: Optional[str] = None
+    nickname: Optional[str] = None
 
     @field_validator("entity_type")
     @classmethod
@@ -44,6 +46,8 @@ class InvestigationResponse(BaseModel):
     entity_id: str
     entity_name: str
     email: Optional[str] = None
+    phone: Optional[str] = None
+    nickname: Optional[str] = None
     risk_score: Optional[float] = None
     risk_level: Optional[str] = None
     error_message: Optional[str] = None

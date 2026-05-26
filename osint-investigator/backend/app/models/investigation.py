@@ -21,6 +21,8 @@ class Investigation(Base):
     entity_id: Mapped[str] = mapped_column(String(20))
     entity_name: Mapped[str] = mapped_column(String(255))
     email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    nickname: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     risk_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     risk_level: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # low/medium/high/critical
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
