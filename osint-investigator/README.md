@@ -121,6 +121,48 @@ docker compose down -v
 
 ---
 
+## Deploy no Railway (URL pública)
+
+Para ter a ferramenta acessível por uma URL pública sem instalar nada localmente:
+
+### 1. Crie uma conta no Railway
+Acesse **railway.app** e crie uma conta gratuita (pode usar o login do GitHub).
+
+### 2. Novo projeto → Deploy from GitHub Repo
+- Clique em **"New Project"**
+- Selecione **"Deploy from GitHub Repo"**
+- Autorize o Railway a acessar sua conta GitHub
+- Selecione o repositório **`Eduselva/pld-aml-detector`**
+- Em **"Root Directory"** coloque: `osint-investigator`
+- O Railway vai detectar o `railway.toml` e usar o `Dockerfile.railway` automaticamente
+
+### 3. Adicione o Redis
+- No painel do projeto, clique em **"+ New"** → **"Database"** → **"Redis"**
+- O Railway cria automaticamente a variável `REDIS_URL` no serviço
+
+### 4. Configure as variáveis de ambiente
+No serviço principal, vá em **"Variables"** e adicione:
+```
+DATABASE_URL=sqlite+aiosqlite:////app/data/osint.db
+DATA_DIR=/app/data
+```
+
+Opcional (para mais consultas ao HIBP):
+```
+HIBP_API_KEY=sua_chave_aqui
+```
+
+### 5. Gere a URL pública
+- Vá em **"Settings"** → **"Networking"** → **"Generate Domain"**
+- Pronto — a ferramenta estará acessível em `https://seu-projeto.up.railway.app`
+
+### Custo estimado no Railway
+- Plano gratuito: $5 de crédito/mês (suficiente para uso moderado)
+- Redis: ~$0.01/hora enquanto ativo
+- App: cobra por uso de CPU/memória
+
+---
+
 ## Atualizar para a versão mais recente
 
 ```bash
