@@ -1,11 +1,20 @@
 name,cpf_partial,role,reason
-João da Silva Santos,***.456.789-**,Prefeito Municipal,Cargo público eletivo
+Eduardo Cosentino da Cunha,***.XXX.XXX-**,Ex-Presidente da Câmara dos Deputados,Cargo público eletivo — condenado Lava Jato
+Eduardo Cunha,***.XXX.XXX-**,Ex-Presidente da Câmara dos Deputados,Cargo público eletivo — condenado Lava Jato
+Sergio de Oliveira Cabral Santos Filho,***.XXX.XXX-**,Ex-Governador do Rio de Janeiro,Cargo público eletivo — condenado Lava Jato
+Sergio Cabral,***.XXX.XXX-**,Ex-Governador do Rio de Janeiro,Cargo público eletivo — condenado Lava Jato
+Jose Dirceu de Oliveira e Silva,***.XXX.XXX-**,Ex-Ministro da Casa Civil,Cargo público — condenado Mensalão
+Jose Dirceu,***.XXX.XXX-**,Ex-Ministro da Casa Civil,Cargo público — condenado Mensalão
+Delcidio do Amaral Gomez,***.XXX.XXX-**,Ex-Senador Federal (MS),Cargo público eletivo — condenado Lava Jato
+Delcidio Amaral,***.XXX.XXX-**,Ex-Senador Federal (MS),Cargo público eletivo — condenado Lava Jato
+Luiz Inacio Lula da Silva,***.XXX.XXX-**,Presidente da República,Cargo público eletivo — PEP nível máximo
+Jair Messias Bolsonaro,***.XXX.XXX-**,Ex-Presidente da República,Cargo público eletivo — PEP nível máximo
+Michel Miguel Elias Temer Lulia,***.XXX.XXX-**,Ex-Presidente da República,Cargo público eletivo — PEP nível máximo
+Michel Temer,***.XXX.XXX-**,Ex-Presidente da República,Cargo público eletivo — indiciado corrupção
+Henrique Eduardo Alves,***.XXX.XXX-**,Ex-Ministro do Turismo,Cargo público eletivo — condenado Lava Jato
+Romero Juca Filho,***.XXX.XXX-**,Ex-Senador Federal (RR),Cargo público eletivo — investigado Lava Jato
+Renan Calheiros,***.XXX.XXX-**,Senador Federal (AL),Cargo público eletivo — múltiplas investigações
+Andre Vargas,***.XXX.XXX-**,Ex-Deputado Federal (PR),Cargo público eletivo — condenado Lava Jato
+Joao da Silva Santos,***.456.789-**,Prefeito Municipal,Cargo público eletivo
 Maria Oliveira Costa,***.123.456-**,Deputada Federal,Cargo público eletivo
 Carlos Eduardo Ferreira,***.789.012-**,Secretário Estadual,Cargo público comissionado
-Ana Paula Mendes Rodrigues,***.321.654-**,Vereadora,Cargo público eletivo
-Rodrigo Batista Lima,***.654.321-**,Governador,Cargo público eletivo
-Fernanda Cristina Souza,***.987.654-**,Ministro do Estado,Cargo público eletivo
-Paulo Roberto Almeida,***.147.258-**,Senador,Cargo público eletivo
-Luciana Pereira Gomes,***.369.258-**,Juíza Federal,Magistratura
-Roberto Henrique Martins,***.741.852-**,Delegado Chefe,Força policial
-Mariana Figueiredo Nunes,***.963.741-**,Presidente de Autarquia,Cargo público de confiança
