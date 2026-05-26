@@ -74,6 +74,9 @@ class NegativeMediaSource(BaseSource):
             try:
                 if use_google:
                     results = await self._google_search(query)
+                    if not results:
+                        logger.info(f"Google retornou vazio, tentando DuckDuckGo: {query[:50]}")
+                        results = await self._ddg_search(query)
                 else:
                     results = await self._ddg_search(query)
                 queries_run.append(query)
