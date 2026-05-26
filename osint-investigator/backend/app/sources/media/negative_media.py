@@ -1,20 +1,16 @@
 import logging
-import re
 import unicodedata
-from urllib.parse import urlencode, unquote
 
 import httpx
-from bs4 import BeautifulSoup
 
 from app.sources.base import BaseSource
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-DDG_URL = "https://html.duckduckgo.com/html/"
 GOOGLE_URL = "https://www.googleapis.com/customsearch/v1"
+SERPER_URL = "https://google.serper.dev/search"
 
-# Individual fraud terms — used to build simple per-term queries
 FRAUD_TERMS_PT = ["fraude", "golpe", "estelionato", "lavagem de dinheiro", "COAF",
                   "preso", "condenado", "investigado", "corrupção", "operação policial"]
 FRAUD_TERMS_EN = ["fraud", "scam", "money laundering", "arrested", "corruption"]
@@ -26,7 +22,6 @@ def _remove_accents(text: str) -> str:
 
 
 def _name_variants(name: str, nickname: str | None) -> list[str]:
-    """Return search name variants to try."""
     variants = [name]
     no_accent = _remove_accents(name)
     if no_accent != name:
@@ -39,14 +34,12 @@ def _name_variants(name: str, nickname: str | None) -> list[str]:
         no_acc_nick = _remove_accents(nickname.strip())
         if no_acc_nick != nickname.strip():
             variants.append(no_acc_nick)
-    return list(dict.fromkeys(variants))  # deduplicate preserving order
+    return list(dict.fromkeys(variants))
 
 
 def _build_queries(name: str, nickname: str | None) -> list[str]:
-    """Build simple human-like queries — one name variant + one term at a time."""
     variants = _name_variants(name, nickname)
     queries = []
-    # For each variant, search with a combined PT block and EN block
     for variant in variants:
         pt_block = " OR ".join(f'"{t}"' if " " in t else t for t in FRAUD_TERMS_PT)
         queries.append(f'"{variant}" ({pt_block})')
@@ -61,31 +54,37 @@ class NegativeMediaSource(BaseSource):
 
     async def collect(self, entity_id: str, entity_name: str, email=None,
                       nickname=None, phone=None, **kwargs) -> dict:
+        use_serper = bool(settings.serper_api_key)
         use_google = bool(settings.google_search_api_key and settings.google_search_cx)
+
+        if not use_serper and not use_google:
+            return self._make_result(
+                raw_score=0.0,
+                summary="Busca de mídia negativa indisponível: configure SERPER_API_KEY ou GOOGLE_SEARCH_API_KEY + GOOGLE_SEARCH_CX.",
+                alerts=[self._make_alert("warning", "Nenhum motor de busca configurado — mídia negativa desativada")],
+                data={"total_results": 0, "results": [], "engine_used": "none", "queries_run": [], "errors": []},
+            )
+
+        engine_used = "serper" if use_serper else "google"
         queries = _build_queries(entity_name, nickname)
 
         all_results: list[dict] = []
         seen_urls: set[str] = set()
         errors = []
         queries_run = []
-        engine_used = "google"
-
-        if not use_google:
-            return self._make_result(
-                raw_score=0.0,
-                summary="Busca de mídia negativa indisponível: configure GOOGLE_SEARCH_API_KEY e GOOGLE_SEARCH_CX.",
-                alerts=[self._make_alert("warning", "Google CSE não configurado — busca de mídia negativa desativada")],
-                data={"total_results": 0, "results": [], "engine_used": "none", "queries_run": []},
-            )
 
         for query in queries:
             try:
-                results, err = await self._google_search(query)
+                if use_serper:
+                    results, err = await self._serper_search(query)
+                else:
+                    results, err = await self._google_search(query)
+
                 if err:
+                    if not errors:  # log only first error to avoid spam
+                        logger.warning(f"Search error [{query[:50]}]: {err}")
                     errors.append(err)
-                    if not any("Google CSE HTTP" in e for e in errors[:-1]):
-                        # log only first unique API error to avoid spam
-                        logger.warning(f"Google CSE error on query [{query[:50]}]: {err}")
+
                 queries_run.append(query)
                 for r in results:
                     if r["url"] not in seen_urls:
@@ -112,9 +111,39 @@ class NegativeMediaSource(BaseSource):
                 "engine_used": engine_used,
                 "queries_run": queries_run,
                 "nickname_searched": bool(nickname),
-                "errors": errors,
+                "errors": errors[:5],
             },
         )
+
+    async def _serper_search(self, query: str) -> tuple[list[dict], str | None]:
+        headers = {
+            "X-API-KEY": settings.serper_api_key,
+            "Content-Type": "application/json",
+        }
+        payload = {"q": query, "gl": "br", "hl": "pt", "num": 10}
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                resp = await client.post(SERPER_URL, json=payload, headers=headers)
+            if resp.status_code != 200:
+                error_msg = f"Serper HTTP {resp.status_code}"
+                try:
+                    body = resp.json()
+                    error_msg += f": {body.get('message', '')}"
+                except Exception:
+                    pass
+                return [], error_msg
+            data = resp.json()
+            results = []
+            for item in data.get("organic", []):
+                results.append({
+                    "title": item.get("title", ""),
+                    "snippet": item.get("snippet", ""),
+                    "url": item.get("link", ""),
+                    "display_url": item.get("displayLink", ""),
+                })
+            return results, None
+        except Exception as e:
+            return [], str(e)
 
     async def _google_search(self, query: str) -> tuple[list[dict], str | None]:
         params = {
@@ -134,7 +163,6 @@ class NegativeMediaSource(BaseSource):
                     error_msg += f": {body.get('error', {}).get('message', '')}"
                 except Exception:
                     pass
-                logger.warning(error_msg)
                 return [], error_msg
             data = resp.json()
             results = []
@@ -147,50 +175,7 @@ class NegativeMediaSource(BaseSource):
                 })
             return results, None
         except Exception as e:
-            logger.exception(f"Google CSE error: {e}")
             return [], str(e)
-
-    async def _ddg_search(self, query: str) -> list[dict]:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Referer": "https://duckduckgo.com/",
-        }
-        payload = urlencode({"q": query, "b": "", "kl": "br-pt"})
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout, headers=headers,
-                                         follow_redirects=True) as client:
-                resp = await client.post(DDG_URL, content=payload)
-            if resp.status_code != 200:
-                return []
-            return self._parse_ddg_html(resp.text)
-        except Exception as e:
-            logger.exception(f"DuckDuckGo search error: {e}")
-            return []
-
-    def _parse_ddg_html(self, html: str) -> list[dict]:
-        soup = BeautifulSoup(html, "html.parser")
-        results = []
-        for div in soup.select(".result"):
-            title_el = div.select_one(".result__title a")
-            snippet_el = div.select_one(".result__snippet")
-            url_el = div.select_one(".result__url")
-            if not title_el:
-                continue
-            title = title_el.get_text(strip=True)
-            snippet = snippet_el.get_text(strip=True) if snippet_el else ""
-            url = title_el.get("href", "")
-            display_url = url_el.get_text(strip=True) if url_el else ""
-            if url.startswith("//duckduckgo.com/l/?"):
-                m = re.search(r"uddg=([^&]+)", url)
-                if m:
-                    url = unquote(m.group(1))
-            if title and url:
-                results.append({"title": title, "snippet": snippet,
-                                 "url": url, "display_url": display_url})
-        return results
 
     def _compute_score(self, results: list[dict]) -> tuple[float, list]:
         num = len(results)

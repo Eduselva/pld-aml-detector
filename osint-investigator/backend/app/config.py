@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     hibp_api_key: str = ""
     google_search_api_key: str = ""   # Google Custom Search API key
     google_search_cx: str = ""        # Google Custom Search Engine ID
+    serper_api_key: str = ""          # Serper.dev API key (alternativa ao Google CSE)
     # In production (Railway), frontend is served from the same origin,
     # so CORS is only needed for local dev. Allow all origins as fallback.
     cors_origins: List[str] = ["*"]
