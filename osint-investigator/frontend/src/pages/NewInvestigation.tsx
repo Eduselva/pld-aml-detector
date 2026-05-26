@@ -63,8 +63,8 @@ export default function NewInvestigation() {
     if (entityType !== 'apelido') {
       const digits = entityId.replace(/\D/g, '')
       const expectedLen = entityType === 'cpf' ? 11 : 14
-      if (digits.length !== expectedLen) {
-        setError(`${entityType.toUpperCase()} deve ter ${expectedLen} dígitos.`)
+      if (digits.length > 0 && digits.length !== expectedLen) {
+        setError(`${entityType.toUpperCase()} incompleto — informe ${expectedLen} dígitos ou deixe em branco.`)
         setLoading(false)
         return
       }
@@ -74,7 +74,7 @@ export default function NewInvestigation() {
       const inv = await api.createInvestigation({
         entity_name: entityName.trim(),
         entity_type: entityType,
-        entity_id: entityType !== 'apelido' ? entityId.replace(/\D/g, '') : null,
+        entity_id: entityType !== 'apelido' && entityId.replace(/\D/g, '').length > 0 ? entityId.replace(/\D/g, '') : null,
         email: email.trim() || undefined,
         nickname: nickname.trim() || null,
         phone: phone.replace(/\D/g, '') || null,
@@ -86,10 +86,13 @@ export default function NewInvestigation() {
     }
   }
 
+  const digits = entityId.replace(/\D/g, '')
+  const expectedLen = entityType === 'cpf' ? 11 : 14
   const isValid =
     entityName.trim().length >= 2 &&
     (entityType === 'apelido' ||
-      entityId.replace(/\D/g, '').length === (entityType === 'cpf' ? 11 : 14))
+      digits.length === 0 ||
+      digits.length === expectedLen)
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -164,7 +167,7 @@ export default function NewInvestigation() {
               <div>
                 <label htmlFor="entity-id" className="block text-sm font-semibold text-gray-700 mb-1.5">
                   {entityType === 'cpf' ? 'CPF' : 'CNPJ'}
-                  <span className="text-red-500 ml-1">*</span>
+                  <span className="text-gray-400 font-normal ml-2 text-xs">(opcional)</span>
                 </label>
                 <input
                   id="entity-id"
