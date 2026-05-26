@@ -68,17 +68,19 @@ class NegativeMediaSource(BaseSource):
         seen_urls: set[str] = set()
         errors = []
         queries_run = []
-        engine_used = "google" if use_google else "duckduckgo"
+        engine_used = "google"
+
+        if not use_google:
+            return self._make_result(
+                raw_score=0.0,
+                summary="Busca de mídia negativa indisponível: configure GOOGLE_SEARCH_API_KEY e GOOGLE_SEARCH_CX.",
+                alerts=[self._make_alert("warning", "Google CSE não configurado — busca de mídia negativa desativada")],
+                data={"total_results": 0, "results": [], "engine_used": "none", "queries_run": []},
+            )
 
         for query in queries:
             try:
-                if use_google:
-                    results = await self._google_search(query)
-                    if not results:
-                        logger.info(f"Google retornou vazio, tentando DuckDuckGo: {query[:50]}")
-                        results = await self._ddg_search(query)
-                else:
-                    results = await self._ddg_search(query)
+                results = await self._google_search(query)
                 queries_run.append(query)
                 for r in results:
                     if r["url"] not in seen_urls:
