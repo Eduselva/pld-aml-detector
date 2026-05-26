@@ -3,6 +3,14 @@ import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import type { EntityType } from '../types'
 
+function applyPhoneMask(value: string): string {
+  const digits = value.replace(/\D/g, '')
+  if (digits.length <= 2) return digits.length ? `(${digits}` : ''
+  if (digits.length <= 6) return `(${digits.slice(0,2)}) ${digits.slice(2)}`
+  if (digits.length <= 10) return `(${digits.slice(0,2)}) ${digits.slice(2,6)}-${digits.slice(6)}`
+  return `(${digits.slice(0,2)}) ${digits.slice(2,7)}-${digits.slice(7,11)}`
+}
+
 function applyMask(value: string, type: EntityType): string {
   const digits = value.replace(/\D/g, '')
   if (type === 'cpf') {
@@ -25,6 +33,8 @@ export default function NewInvestigation() {
   const [entityName, setEntityName] = useState('')
   const [entityId, setEntityId] = useState('')
   const [email, setEmail] = useState('')
+  const [nickname, setNickname] = useState('')
+  const [phone, setPhone] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -57,6 +67,8 @@ export default function NewInvestigation() {
         entity_type: entityType,
         entity_id: digits,
         email: email.trim() || undefined,
+        nickname: nickname.trim() || null,
+        phone: phone.replace(/\D/g, '') || null,
       })
       navigate(`/investigacoes/${inv.id}/relatorio`)
     } catch (err) {
@@ -168,6 +180,42 @@ export default function NewInvestigation() {
               <p className="text-xs text-gray-400 mt-1">
                 Usado para verificação de vazamentos de dados (HIBP) e mapeamento de redes sociais
               </p>
+            </div>
+
+            {/* Nickname */}
+            <div>
+              <label htmlFor="nickname" className="block text-sm font-semibold text-gray-700 mb-1.5">
+                Apelido / Nome Conhecido
+                <span className="text-gray-400 font-normal ml-2 text-xs">(opcional)</span>
+              </label>
+              <input
+                id="nickname"
+                type="text"
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                placeholder="Ex: Zé da Roça, Dr. Silva"
+                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Amplia a busca em mídias negativas e redes sociais
+              </p>
+            </div>
+
+            {/* Phone */}
+            <div>
+              <label htmlFor="phone" className="block text-sm font-semibold text-gray-700 mb-1.5">
+                Telefone
+                <span className="text-gray-400 font-normal ml-2 text-xs">(opcional)</span>
+              </label>
+              <input
+                id="phone"
+                type="text"
+                value={phone}
+                onChange={(e) => setPhone(applyPhoneMask(e.target.value))}
+                placeholder="(00) 00000-0000"
+                maxLength={16}
+                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+              />
             </div>
 
             {error && (

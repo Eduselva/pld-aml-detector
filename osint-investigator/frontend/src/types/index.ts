@@ -12,6 +12,8 @@ export interface Investigation {
   entity_id: string
   entity_name: string
   email?: string | null
+  phone?: string | null
+  nickname?: string | null
   risk_score?: number | null
   risk_level?: RiskLevel | null
   error_message?: string | null
@@ -27,6 +29,8 @@ export interface InvestigationCreate {
   entity_type: EntityType
   entity_id: string
   email?: string
+  phone?: string | null
+  nickname?: string | null
 }
 
 export interface RiskScore {
