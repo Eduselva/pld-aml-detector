@@ -1,11 +1,11 @@
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 from typing import Optional
 from datetime import datetime
 import re
 
 
 class InvestigationCreate(BaseModel):
-    entity_name: str
+    entity_name: Optional[str] = None
     entity_type: str  # "cpf", "cnpj", or "apelido"
     entity_id: Optional[str] = None
     email: Optional[str] = None
@@ -29,13 +29,30 @@ class InvestigationCreate(BaseModel):
             raise ValueError("entity_id must contain only digits (and optional formatting)")
         return cleaned
 
-    @field_validator("entity_name")
+    @field_validator("entity_name", mode="before")
     @classmethod
-    def validate_name(cls, v: str) -> str:
+    def clean_name(cls, v: Optional[str]) -> Optional[str]:
+        if not v:
+            return None
         v = v.strip()
-        if len(v) < 2:
-            raise ValueError("entity_name must have at least 2 characters")
-        return v
+        return v if v else None
+
+    @field_validator("nickname", mode="before")
+    @classmethod
+    def clean_nickname(cls, v: Optional[str]) -> Optional[str]:
+        if not v:
+            return None
+        v = v.strip()
+        return v if v else None
+
+    @model_validator(mode="after")
+    def require_at_least_one_identifier(self) -> "InvestigationCreate":
+        has_name = bool(self.entity_name)
+        has_id = bool(self.entity_id)
+        has_nickname = bool(self.nickname)
+        if not has_name and not has_id and not has_nickname:
+            raise ValueError("Informe ao menos um dado: nome, documento ou apelido")
+        return self
 
 
 class InvestigationResponse(BaseModel):
@@ -45,7 +62,7 @@ class InvestigationResponse(BaseModel):
     status: str
     entity_type: str
     entity_id: Optional[str] = None
-    entity_name: str
+    entity_name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
     nickname: Optional[str] = None

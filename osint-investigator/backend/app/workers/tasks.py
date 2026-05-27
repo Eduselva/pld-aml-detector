@@ -150,7 +150,7 @@ def _build_source_tasks(entity_name: str, entity_type: str, entity_id: str, emai
         tasks.append(("cnpj", _empty_source("cnpj")))
 
     tasks.append(("negative_media", NegativeMediaSource().collect(entity_id=entity_id, entity_name=entity_name, nickname=nickname, phone=phone)))
-    tasks.append(("restrictive_lists", RestrictiveListsSource().collect(entity_id=entity_id, entity_name=entity_name)))
+    tasks.append(("restrictive_lists", RestrictiveListsSource().collect(entity_id=entity_id, entity_name=entity_name, nickname=nickname)))
 
     if email:
         tasks.append(("hibp", HIBPSource().collect(entity_id=entity_id, entity_name=entity_name, email=email)))

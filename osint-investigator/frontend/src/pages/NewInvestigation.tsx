@@ -60,21 +60,30 @@ export default function NewInvestigation() {
     setError(null)
     setLoading(true)
 
-    if (entityType !== 'apelido') {
-      const digits = entityId.replace(/\D/g, '')
-      const expectedLen = entityType === 'cpf' ? 11 : 14
-      if (digits.length > 0 && digits.length !== expectedLen) {
-        setError(`${entityType.toUpperCase()} incompleto — informe ${expectedLen} dígitos ou deixe em branco.`)
-        setLoading(false)
-        return
-      }
+    const digits = entityId.replace(/\D/g, '')
+    const expectedLen = entityType === 'cpf' ? 11 : 14
+
+    if (entityType !== 'apelido' && digits.length > 0 && digits.length !== expectedLen) {
+      setError(`${entityType.toUpperCase()} incompleto — informe ${expectedLen} dígitos ou deixe em branco.`)
+      setLoading(false)
+      return
+    }
+
+    const hasName = entityName.trim().length >= 2
+    const hasDoc = entityType !== 'apelido' && digits.length === expectedLen
+    const hasNick = nickname.trim().length >= 2
+
+    if (!hasName && !hasDoc && !hasNick) {
+      setError('Informe ao menos um dado: nome completo, documento ou apelido.')
+      setLoading(false)
+      return
     }
 
     try {
       const inv = await api.createInvestigation({
-        entity_name: entityName.trim(),
+        entity_name: entityName.trim() || null,
         entity_type: entityType,
-        entity_id: entityType !== 'apelido' && entityId.replace(/\D/g, '').length > 0 ? entityId.replace(/\D/g, '') : null,
+        entity_id: hasDoc ? digits : null,
         email: email.trim() || undefined,
         nickname: nickname.trim() || null,
         phone: phone.replace(/\D/g, '') || null,
@@ -88,11 +97,11 @@ export default function NewInvestigation() {
 
   const digits = entityId.replace(/\D/g, '')
   const expectedLen = entityType === 'cpf' ? 11 : 14
-  const isValid =
-    entityName.trim().length >= 2 &&
-    (entityType === 'apelido' ||
-      digits.length === 0 ||
-      digits.length === expectedLen)
+  const hasName = entityName.trim().length >= 2
+  const hasDoc = entityType !== 'apelido' && digits.length === expectedLen
+  const hasNick = nickname.trim().length >= 2
+  const docPartial = entityType !== 'apelido' && digits.length > 0 && digits.length !== expectedLen
+  const isValid = (hasName || hasDoc || hasNick) && !docPartial
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -145,7 +154,10 @@ export default function NewInvestigation() {
             <div>
               <label htmlFor="name" className="block text-sm font-semibold text-gray-700 mb-1.5">
                 {entityType === 'cnpj' ? 'Razão Social' : entityType === 'apelido' ? 'Apelido / Nome Conhecido' : 'Nome Completo'}
-                <span className="text-red-500 ml-1">*</span>
+                {entityType === 'apelido'
+                  ? <span className="text-red-500 ml-1">*</span>
+                  : <span className="text-gray-400 font-normal ml-2 text-xs">(opcional)</span>
+                }
               </label>
               <input
                 id="name"
@@ -158,8 +170,12 @@ export default function NewInvestigation() {
                   'Ex: João da Silva Santos'
                 }
                 className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                required
               />
+              {entityType !== 'apelido' && !hasName && !hasDoc && (
+                <p className="text-xs text-amber-600 mt-1">
+                  Informe o nome, o {entityType.toUpperCase()} ou o apelido para prosseguir.
+                </p>
+              )}
             </div>
 
             {/* Entity ID — hidden in apelido mode */}

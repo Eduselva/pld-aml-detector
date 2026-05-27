@@ -21,23 +21,28 @@ def _remove_accents(text: str) -> str:
     return "".join(c for c in nfkd if not unicodedata.combining(c))
 
 
-def _name_variants(name: str, nickname: str | None) -> list[str]:
-    variants = [name]
-    no_accent = _remove_accents(name)
-    if no_accent != name:
-        variants.append(no_accent)
-    parts = name.strip().split()
-    if len(parts) >= 3:
-        variants.append(f"{parts[0]} {parts[-1]}")
+def _name_variants(name: str | None, nickname: str | None) -> list[str]:
+    variants = []
+    if name and name.strip():
+        n = name.strip()
+        variants.append(n)
+        no_accent = _remove_accents(n)
+        if no_accent != n:
+            variants.append(no_accent)
+        parts = n.split()
+        if len(parts) >= 3:
+            variants.append(f"{parts[0]} {parts[-1]}")
     if nickname and nickname.strip():
-        variants.append(nickname.strip())
-        no_acc_nick = _remove_accents(nickname.strip())
-        if no_acc_nick != nickname.strip():
+        nick = nickname.strip()
+        if nick not in variants:
+            variants.append(nick)
+        no_acc_nick = _remove_accents(nick)
+        if no_acc_nick != nick and no_acc_nick not in variants:
             variants.append(no_acc_nick)
     return list(dict.fromkeys(variants))
 
 
-def _build_queries(name: str, nickname: str | None) -> list[str]:
+def _build_queries(name: str | None, nickname: str | None) -> list[str]:
     variants = _name_variants(name, nickname)
     queries = []
     for variant in variants:
@@ -52,7 +57,7 @@ class NegativeMediaSource(BaseSource):
     source_name = "negative_media"
     timeout = 15.0
 
-    async def collect(self, entity_id: str, entity_name: str, email=None,
+    async def collect(self, entity_id: str | None, entity_name: str | None, email=None,
                       nickname=None, phone=None, **kwargs) -> dict:
         use_serper = bool(settings.serper_api_key)
         use_google = bool(settings.google_search_api_key and settings.google_search_cx)
@@ -65,8 +70,16 @@ class NegativeMediaSource(BaseSource):
                 data={"total_results": 0, "results": [], "engine_used": "none", "queries_run": [], "errors": []},
             )
 
-        engine_used = "serper" if use_serper else "google"
         queries = _build_queries(entity_name, nickname)
+        if not queries:
+            return self._make_result(
+                raw_score=0.0,
+                summary="Nenhum termo de busca disponível.",
+                alerts=[],
+                data={"total_results": 0, "results": [], "engine_used": "none", "queries_run": [], "errors": []},
+            )
+
+        engine_used = "serper" if use_serper else "google"
 
         all_results: list[dict] = []
         seen_urls: set[str] = set()

@@ -32,7 +32,8 @@ function RiskScoreCell({ score, level }: { score?: number | null; level?: string
   )
 }
 
-function formatEntityId(type: string, id: string) {
+function formatEntityId(type: string, id?: string | null) {
+  if (!id) return '—'
   if (type === 'cpf') {
     const d = id.replace(/\D/g, '')
     if (d.length === 11) {
@@ -177,7 +178,9 @@ export default function Dashboard() {
                     className="hover:bg-gray-50 cursor-pointer transition-colors"
                     onClick={() => inv.status === 'complete' && navigate(`/investigacoes/${inv.id}/relatorio`)}
                   >
-                    <td className="px-5 py-3.5 font-medium text-gray-900">{inv.entity_name}</td>
+                    <td className="px-5 py-3.5 font-medium text-gray-900">
+                      {inv.entity_name || inv.nickname || inv.entity_id || '—'}
+                    </td>
                     <td className="px-5 py-3.5">
                       <span className="uppercase text-xs font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
                         {inv.entity_type}

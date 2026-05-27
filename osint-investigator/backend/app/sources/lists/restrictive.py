@@ -161,12 +161,37 @@ class RestrictiveListsSource(BaseSource):
     source_name = "restrictive_lists"
     timeout = 30.0
 
-    async def collect(self, entity_id: Optional[str], entity_name: str,
-                      email: Optional[str] = None, **kwargs: Any) -> dict:
-        normalized = normalize_name(entity_name)
+    async def collect(self, entity_id: Optional[str], entity_name: Optional[str] = None,
+                      email: Optional[str] = None, nickname: Optional[str] = None,
+                      **kwargs: Any) -> dict:
+        # Build list of normalized terms to check (name + nickname, deduped)
+        search_terms: list[str] = []
+        if entity_name and entity_name.strip():
+            search_terms.append(normalize_name(entity_name))
+        if nickname and nickname.strip():
+            nick_norm = normalize_name(nickname)
+            if nick_norm not in search_terms:
+                search_terms.append(nick_norm)
+
+        if not search_terms:
+            return self._make_result(
+                raw_score=0.0,
+                summary="Sem nome ou apelido para verificar em listas restritivas.",
+                alerts=[],
+                data={"matches": [], "total_matches": 0, "sources_checked": [], "cgu_realtime": False},
+            )
+
         matches = []
         alerts = []
         sources_checked = []
+        seen_entries: set[str] = set()
+
+        def _add_match(match: dict, alert_msg: str, severity: str):
+            key = f"{match['list']}:{match['name']}"
+            if key not in seen_entries:
+                seen_entries.add(key)
+                matches.append(match)
+                alerts.append(self._make_alert(severity, alert_msg))
 
         # — OFAC SDN (download automático) —
         ofac_entries = await _load_ofac_list()
@@ -174,66 +199,68 @@ class RestrictiveListsSource(BaseSource):
 
         for entry in ofac_entries:
             entry_norm = normalize_name(entry["name"])
-            ratio = best_match_score(normalized, entry_norm)
-            if ratio >= MATCH_THRESHOLD:
-                match_type = "exato" if ratio >= 0.98 else "fuzzy"
-                matches.append({
-                    "list": entry["list"],
-                    "name": entry["name"],
-                    "reason": entry.get("reason", ""),
-                    "nationality": entry.get("nationality", ""),
-                    "match_score": round(ratio, 3),
-                    "match_type": match_type,
-                })
-                alerts.append(self._make_alert(
-                    "critical" if ratio >= 0.98 else "danger",
-                    f"Correspondência OFAC/SDN ({match_type}): {entry['name']} — {entry.get('reason', '')[:80]}"
-                ))
+            best = max(best_match_score(term, entry_norm) for term in search_terms)
+            if best >= MATCH_THRESHOLD:
+                match_type = "exato" if best >= 0.98 else "fuzzy"
+                _add_match(
+                    {
+                        "list": entry["list"],
+                        "name": entry["name"],
+                        "reason": entry.get("reason", ""),
+                        "nationality": entry.get("nationality", ""),
+                        "match_score": round(best, 3),
+                        "match_type": match_type,
+                    },
+                    f"Correspondência OFAC/SDN ({match_type}): {entry['name']} — {entry.get('reason', '')[:80]}",
+                    "critical" if best >= 0.98 else "danger",
+                )
 
         # — PEP Brasil: CGU API (tempo real) ou CSV local —
-        cgu_results = await _search_cgu_pep(entity_name)
+        # CGU API: query by first available term
+        primary_name = entity_name or nickname or ""
+        cgu_results = await _search_cgu_pep(primary_name)
         if cgu_results:
             sources_checked.append("PEP/CGU (API tempo real)")
             for item in cgu_results:
                 item_norm = normalize_name(item["name"])
-                ratio = best_match_score(normalized, item_norm)
-                if ratio >= MATCH_THRESHOLD:
-                    match_type = "exato" if ratio >= 0.98 else "fuzzy"
-                    matches.append({
-                        "list": "PEP/CGU",
-                        "name": item["name"],
-                        "role": item.get("role", ""),
-                        "cpf_partial": item.get("cpf_partial", ""),
-                        "reason": item["reason"],
-                        "match_score": round(ratio, 3),
-                        "match_type": match_type,
-                    })
-                    alerts.append(self._make_alert(
-                        "critical" if ratio >= 0.98 else "danger",
-                        f"PEP identificado (CGU): {item['name']} — {item.get('role', '')}"
-                    ))
+                best = max(best_match_score(term, item_norm) for term in search_terms)
+                if best >= MATCH_THRESHOLD:
+                    match_type = "exato" if best >= 0.98 else "fuzzy"
+                    _add_match(
+                        {
+                            "list": "PEP/CGU",
+                            "name": item["name"],
+                            "role": item.get("role", ""),
+                            "cpf_partial": item.get("cpf_partial", ""),
+                            "reason": item["reason"],
+                            "match_score": round(best, 3),
+                            "match_type": match_type,
+                        },
+                        f"PEP identificado (CGU): {item['name']} — {item.get('role', '')}",
+                        "critical" if best >= 0.98 else "danger",
+                    )
         else:
             # Fallback: CSV local
-            local_peps = _load_local_pep(entity_name)
+            local_peps = _load_local_pep(primary_name)
             sources_checked.append(f"PEP/local ({len(local_peps)} entradas)")
             for entry in local_peps:
                 entry_norm = normalize_name(entry.get("name", ""))
-                ratio = best_match_score(normalized, entry_norm)
-                if ratio >= MATCH_THRESHOLD:
-                    match_type = "exato" if ratio >= 0.98 else "fuzzy"
-                    matches.append({
-                        "list": "PEP",
-                        "name": entry.get("name", ""),
-                        "role": entry.get("role", ""),
-                        "cpf_partial": entry.get("cpf_partial", ""),
-                        "reason": entry.get("reason", ""),
-                        "match_score": round(ratio, 3),
-                        "match_type": match_type,
-                    })
-                    alerts.append(self._make_alert(
-                        "critical" if ratio >= 0.98 else "danger",
-                        f"Possível PEP ({match_type}): {entry.get('name')} — {entry.get('role', '')}"
-                    ))
+                best = max(best_match_score(term, entry_norm) for term in search_terms)
+                if best >= MATCH_THRESHOLD:
+                    match_type = "exato" if best >= 0.98 else "fuzzy"
+                    _add_match(
+                        {
+                            "list": "PEP",
+                            "name": entry.get("name", ""),
+                            "role": entry.get("role", ""),
+                            "cpf_partial": entry.get("cpf_partial", ""),
+                            "reason": entry.get("reason", ""),
+                            "match_score": round(best, 3),
+                            "match_type": match_type,
+                        },
+                        f"Possível PEP ({match_type}): {entry.get('name')} — {entry.get('role', '')}",
+                        "critical" if best >= 0.98 else "danger",
+                    )
 
         raw_score = self._compute_score(matches)
         summary = (

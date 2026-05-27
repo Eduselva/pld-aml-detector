@@ -45,6 +45,8 @@ async def create_investigation(
         entity_id=payload.entity_id,
         entity_name=payload.entity_name,
         email=payload.email,
+        nickname=payload.nickname,
+        phone=payload.phone,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
     )

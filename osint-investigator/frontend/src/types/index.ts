@@ -9,8 +9,8 @@ export interface Investigation {
   updated_at: string
   status: InvestigationStatus
   entity_type: EntityType
-  entity_id: string
-  entity_name: string
+  entity_id?: string | null
+  entity_name?: string | null
   email?: string | null
   phone?: string | null
   nickname?: string | null
@@ -25,7 +25,7 @@ export interface InvestigationListResponse {
 }
 
 export interface InvestigationCreate {
-  entity_name: string
+  entity_name?: string | null
   entity_type: EntityType
   entity_id?: string | null
   email?: string
@@ -60,9 +60,9 @@ export interface SourceFinding {
 
 export interface DossierReport {
   investigation_id: string
-  entity_name: string
+  entity_name?: string | null
   entity_type: EntityType
-  entity_id: string
+  entity_id?: string | null
   email?: string | null
   status: InvestigationStatus
   created_at: string

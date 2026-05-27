@@ -19,7 +19,7 @@ class Investigation(Base):
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending/running/complete/failed
     entity_type: Mapped[str] = mapped_column(String(10))  # cpf/cnpj
     entity_id: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    entity_name: Mapped[str] = mapped_column(String(255))
+    entity_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     phone: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     nickname: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
