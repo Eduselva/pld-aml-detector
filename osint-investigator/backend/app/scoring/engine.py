@@ -8,6 +8,7 @@ WEIGHTS = {
 
 SOURCE_CATEGORY_MAP = {
     "cnpj": "corporate",
+    "qsa_search": "corporate",
     "negative_media": "media",
     "restrictive_lists": "lists",
     "social_linkedin": "social",

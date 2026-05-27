@@ -8,14 +8,15 @@ import SourceCard from '../components/SourceCard'
 import StatusBadge from '../components/StatusBadge'
 
 const SOURCE_META: Record<string, { label: string; icon: string }> = {
-  cnpj:              { label: 'CNPJ / Receita Federal', icon: '🏢' },
-  negative_media:    { label: 'Mídias Negativas',        icon: '📰' },
-  restrictive_lists: { label: 'Listas PEP/OFAC',         icon: '🚫' },
-  social_linkedin:   { label: 'LinkedIn',                icon: '💼' },
-  social_instagram:  { label: 'Instagram',               icon: '📷' },
-  social_twitter:    { label: 'Twitter / X',             icon: '🐦' },
-  social_tiktok:     { label: 'TikTok',                  icon: '🎵' },
-  hibp:              { label: 'Vazamentos (HIBP)',        icon: '📧' },
+  cnpj:              { label: 'CNPJ / Receita Federal',  icon: '🏢' },
+  qsa_search:        { label: 'Vínculos Societários',     icon: '🤝' },
+  negative_media:    { label: 'Mídias Negativas',         icon: '📰' },
+  restrictive_lists: { label: 'Listas PEP/OFAC',          icon: '🚫' },
+  social_linkedin:   { label: 'LinkedIn',                 icon: '💼' },
+  social_instagram:  { label: 'Instagram',                icon: '📷' },
+  social_twitter:    { label: 'Twitter / X',              icon: '🐦' },
+  social_tiktok:     { label: 'TikTok',                   icon: '🎵' },
+  hibp:              { label: 'Vazamentos (HIBP)',         icon: '📧' },
 }
 
 const SOURCE_ORDER = Object.keys(SOURCE_META)

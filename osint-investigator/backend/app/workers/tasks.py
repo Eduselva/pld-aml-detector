@@ -133,6 +133,7 @@ async def _run_investigation_async(investigation_id: str):
 def _build_source_tasks(entity_name: str, entity_type: str, entity_id: str, email: Optional[str], nickname: Optional[str] = None, phone: Optional[str] = None):
     """Build list of (source_name, coroutine) tuples."""
     from app.sources.corporate.cnpj import CNPJSource
+    from app.sources.corporate.qsa_search import QSASearchSource
     from app.sources.media.negative_media import NegativeMediaSource
     from app.sources.lists.restrictive import RestrictiveListsSource
     from app.sources.email_intel.hibp import HIBPSource
@@ -145,9 +146,13 @@ def _build_source_tasks(entity_name: str, entity_type: str, entity_id: str, emai
 
     if entity_type == "cnpj":
         tasks.append(("cnpj", CNPJSource().collect(entity_id=entity_id, entity_name=entity_name)))
+        tasks.append(("qsa_search", _empty_source("qsa_search")))
     else:
-        # For CPF (individuals), skip CNPJ source
+        # For CPF/apelido: skip direct CNPJ lookup, search for corporate links instead
         tasks.append(("cnpj", _empty_source("cnpj")))
+        tasks.append(("qsa_search", QSASearchSource().collect(
+            entity_id=entity_id, entity_name=entity_name, nickname=nickname
+        )))
 
     tasks.append(("negative_media", NegativeMediaSource().collect(entity_id=entity_id, entity_name=entity_name, nickname=nickname, phone=phone)))
     tasks.append(("restrictive_lists", RestrictiveListsSource().collect(entity_id=entity_id, entity_name=entity_name, nickname=nickname)))

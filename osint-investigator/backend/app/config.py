@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     google_search_cx: str = ""        # Google Custom Search Engine ID
     serper_api_key: str = ""          # Serper.dev API key (alternativa ao Google CSE)
     cgu_api_key: str = ""             # CGU Portal Transparência — PEP Brasil (grátis)
+    brasilio_token: str = ""          # brasil.io token — QSA socios dataset (opcional, melhora rate limit)
     # In production (Railway), frontend is served from the same origin,
     # so CORS is only needed for local dev. Allow all origins as fallback.
     cors_origins: List[str] = ["*"]

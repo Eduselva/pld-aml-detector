@@ -122,8 +122,8 @@ async def get_report(
         email_score = 0.0
 
         for sr in source_results:
-            if sr.source_name == "cnpj":
-                corporate_score = sr.risk_contribution
+            if sr.source_name in ("cnpj", "qsa_search"):
+                corporate_score = max(corporate_score, sr.risk_contribution)
             elif sr.source_name == "negative_media":
                 media_score = sr.risk_contribution
             elif sr.source_name == "restrictive_lists":

@@ -7,6 +7,7 @@ interface Props {
 
 const sourceLabels: Record<string, string> = {
   cnpj: 'Dados Corporativos (CNPJ)',
+  qsa_search: 'Vínculos Societários',
   negative_media: 'Mídias Negativas',
   restrictive_lists: 'Listas Restritivas (PEP/OFAC)',
   social_linkedin: 'LinkedIn',
@@ -18,6 +19,7 @@ const sourceLabels: Record<string, string> = {
 
 const sourceIcons: Record<string, string> = {
   cnpj: '🏢',
+  qsa_search: '🤝',
   negative_media: '📰',
   restrictive_lists: '🚫',
   social_linkedin: '💼',
@@ -197,6 +199,62 @@ function SocialData({ data }: { data: Record<string, unknown> }) {
   )
 }
 
+function formatCNPJ(cnpj: string) {
+  const d = cnpj.replace(/\D/g, '')
+  if (d.length !== 14) return cnpj
+  return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}`
+}
+
+function QSAData({ data }: { data: Record<string, unknown> }) {
+  const companies = (data.companies as Array<{
+    cnpj: string
+    razao_social: string
+    qualificacao: string
+    data_entrada: string
+    situacao: string | null
+    match_score: number
+    source_url?: string
+  }>) || []
+  const sourceUsed = data.source as string | undefined
+
+  if (companies.length === 0) {
+    return <p className="text-sm text-gray-500">Nenhum vínculo societário encontrado.</p>
+  }
+
+  return (
+    <div className="space-y-2">
+      {sourceUsed && (
+        <p className="text-xs text-gray-400">Fonte: {sourceUsed}</p>
+      )}
+      {companies.map((c, i) => {
+        const isIrregular = c.situacao && /INAPTA|BAIXADA|SUSPENSA|NULA/i.test(c.situacao)
+        return (
+          <div key={i} className={`rounded p-3 text-sm border ${isIrregular ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
+            <div className="flex items-start justify-between gap-2">
+              <span className={`font-semibold ${isIrregular ? 'text-red-800' : 'text-gray-800'}`}>
+                {c.razao_social || formatCNPJ(c.cnpj)}
+              </span>
+              {c.situacao && (
+                <span className={`text-xs font-bold px-1.5 py-0.5 rounded shrink-0 ${isIrregular ? 'bg-red-200 text-red-800' : 'bg-green-100 text-green-800'}`}>
+                  {c.situacao}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 font-mono mt-0.5">{formatCNPJ(c.cnpj)}</p>
+            {c.qualificacao && <p className="text-xs text-gray-600 mt-0.5">Qualificação: {c.qualificacao}</p>}
+            {c.data_entrada && <p className="text-xs text-gray-500">Entrada: {c.data_entrada}</p>}
+            {c.source_url && (
+              <a href={c.source_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline mt-0.5 block">
+                Ver fonte
+              </a>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function HIBPData({ data }: { data: Record<string, unknown> }) {
   const breaches = (data.breaches as Array<{ name: string; title: string; breach_date: string; pwn_count: number; data_classes: string[] }>) || []
   if (breaches.length === 0) {
@@ -242,6 +300,7 @@ function SourceBody({ source }: { source: SourceFinding }) {
   if (summary) {
     const components: Record<string, JSX.Element> = {
       cnpj: <CNPJData data={data} />,
+      qsa_search: <QSAData data={data} />,
       negative_media: <MediaData data={data} />,
       restrictive_lists: <ListsData data={data} />,
       hibp: <HIBPData data={data} />,
