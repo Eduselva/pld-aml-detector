@@ -144,6 +144,9 @@ def _build_source_tasks(entity_name: str, entity_type: str, entity_id: str, emai
     from app.sources.social.facebook import FacebookSource
     from app.sources.social.pinterest import PinterestSource
     from app.sources.social.flickr import FlickrSource
+    from app.sources.government.transparency import TransparencySource
+    from app.sources.government.gazettes import GazettesSource
+    from app.sources.legal.court_records import CourtRecordsSource
 
     tasks = []
 
@@ -172,6 +175,16 @@ def _build_source_tasks(entity_name: str, entity_type: str, entity_id: str, emai
     tasks.append(("social_facebook",  FacebookSource().collect(entity_id=entity_id, entity_name=entity_name, email=email, nickname=nickname)))
     tasks.append(("social_pinterest", PinterestSource().collect(entity_id=entity_id, entity_name=entity_name, email=email, nickname=nickname)))
     tasks.append(("social_flickr",    FlickrSource().collect(entity_id=entity_id, entity_name=entity_name, email=email, nickname=nickname)))
+
+    tasks.append(("transparency_gov", TransparencySource().collect(
+        entity_id=entity_id, entity_name=entity_name, nickname=nickname, entity_type=entity_type
+    )))
+    tasks.append(("gazettes", GazettesSource().collect(
+        entity_id=entity_id, entity_name=entity_name, nickname=nickname
+    )))
+    tasks.append(("court_records", CourtRecordsSource().collect(
+        entity_id=entity_id, entity_name=entity_name, nickname=nickname
+    )))
 
     return tasks
 

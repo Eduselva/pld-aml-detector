@@ -118,16 +118,22 @@ async def get_report(
         corporate_score = 0.0
         media_score = 0.0
         lists_score = 0.0
+        government_score = 0.0
+        legal_score = 0.0
         social_score = 0.0
         email_score = 0.0
 
         for sr in source_results:
             if sr.source_name in ("cnpj", "qsa_search"):
                 corporate_score = max(corporate_score, sr.risk_contribution)
-            elif sr.source_name == "negative_media":
-                media_score = sr.risk_contribution
+            elif sr.source_name in ("negative_media", "gazettes"):
+                media_score = max(media_score, sr.risk_contribution)
             elif sr.source_name == "restrictive_lists":
                 lists_score = sr.risk_contribution
+            elif sr.source_name == "transparency_gov":
+                government_score = sr.risk_contribution
+            elif sr.source_name == "court_records":
+                legal_score = sr.risk_contribution
             elif sr.source_name in ("social_linkedin", "social_instagram", "social_twitter", "social_tiktok",
                                     "social_facebook", "social_pinterest", "social_flickr"):
                 social_score = max(social_score, sr.risk_contribution)
@@ -140,6 +146,8 @@ async def get_report(
             corporate=corporate_score,
             media=media_score,
             lists=lists_score,
+            government=government_score,
+            legal=legal_score,
             social=social_score,
             email=email_score,
         )

@@ -39,6 +39,8 @@ export interface RiskScore {
   corporate: number
   media: number
   lists: number
+  government: number
+  legal: number
   social: number
   email: number
 }

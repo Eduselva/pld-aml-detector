@@ -8,18 +8,21 @@ import SourceCard from '../components/SourceCard'
 import StatusBadge from '../components/StatusBadge'
 
 const SOURCE_META: Record<string, { label: string; icon: string }> = {
-  cnpj:              { label: 'CNPJ / Receita Federal',  icon: '🏢' },
-  qsa_search:        { label: 'Vínculos Societários',     icon: '🤝' },
-  negative_media:    { label: 'Mídias Negativas',         icon: '📰' },
-  restrictive_lists: { label: 'Listas PEP/OFAC',          icon: '🚫' },
-  social_linkedin:   { label: 'LinkedIn',                 icon: '💼' },
-  social_instagram:  { label: 'Instagram',                icon: '📷' },
-  social_twitter:    { label: 'Twitter / X',              icon: '🐦' },
-  social_tiktok:     { label: 'TikTok',                   icon: '🎵' },
-  social_facebook:   { label: 'Facebook',                 icon: '👥' },
-  social_pinterest:  { label: 'Pinterest',                icon: '📌' },
-  social_flickr:     { label: 'Flickr',                   icon: '🖼️' },
-  hibp:              { label: 'Vazamentos (HIBP)',         icon: '📧' },
+  cnpj:              { label: 'CNPJ / Receita Federal',       icon: '🏢' },
+  qsa_search:        { label: 'Vínculos Societários',          icon: '🤝' },
+  negative_media:    { label: 'Mídias Negativas',              icon: '📰' },
+  restrictive_lists: { label: 'Listas PEP/OFAC',               icon: '🚫' },
+  transparency_gov:  { label: 'Portal da Transparência',       icon: '🏛️' },
+  gazettes:          { label: 'Diários Oficiais',              icon: '📜' },
+  court_records:     { label: 'Processos Judiciais (DataJud)', icon: '⚖️' },
+  social_linkedin:   { label: 'LinkedIn',                      icon: '💼' },
+  social_instagram:  { label: 'Instagram',                     icon: '📷' },
+  social_twitter:    { label: 'Twitter / X',                   icon: '🐦' },
+  social_tiktok:     { label: 'TikTok',                        icon: '🎵' },
+  social_facebook:   { label: 'Facebook',                      icon: '👥' },
+  social_pinterest:  { label: 'Pinterest',                     icon: '📌' },
+  social_flickr:     { label: 'Flickr',                        icon: '🖼️' },
+  hibp:              { label: 'Vazamentos (HIBP)',              icon: '📧' },
 }
 
 const SOURCE_ORDER = Object.keys(SOURCE_META)
@@ -43,11 +46,13 @@ function formatEntityId(type: string, id?: string | null) {
 
 function ScoreBreakdown({ score }: { score: NonNullable<DossierReport['risk_score']> }) {
   const items = [
-    { label: 'Corporativo',      value: score.corporate, weight: '20%' },
-    { label: 'Mídias Negativas', value: score.media,     weight: '35%' },
-    { label: 'Listas Restritivas', value: score.lists,   weight: '25%' },
-    { label: 'Redes Sociais',    value: score.social,    weight: '10%' },
-    { label: 'E-mail',           value: score.email,     weight: '10%' },
+    { label: 'Governo / Transparência', value: score.government, weight: '20%' },
+    { label: 'Mídias Negativas',        value: score.media,      weight: '25%' },
+    { label: 'Listas Restritivas',      value: score.lists,      weight: '15%' },
+    { label: 'Processos Judiciais',     value: score.legal,      weight: '10%' },
+    { label: 'Corporativo / QSA',       value: score.corporate,  weight: '15%' },
+    { label: 'Redes Sociais',           value: score.social,     weight: '10%' },
+    { label: 'E-mail',                  value: score.email,      weight: '5%' },
   ]
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">

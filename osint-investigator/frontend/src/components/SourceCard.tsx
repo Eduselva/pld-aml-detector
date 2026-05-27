@@ -10,6 +10,9 @@ const sourceLabels: Record<string, string> = {
   qsa_search: 'Vínculos Societários',
   negative_media: 'Mídias Negativas',
   restrictive_lists: 'Listas Restritivas (PEP/OFAC)',
+  transparency_gov: 'Portal da Transparência',
+  gazettes: 'Diários Oficiais',
+  court_records: 'Processos Judiciais (DataJud)',
   social_linkedin: 'LinkedIn',
   social_instagram: 'Instagram',
   social_twitter: 'Twitter/X',
@@ -25,6 +28,9 @@ const sourceIcons: Record<string, string> = {
   qsa_search: '🤝',
   negative_media: '📰',
   restrictive_lists: '🚫',
+  transparency_gov: '🏛️',
+  gazettes: '📜',
+  court_records: '⚖️',
   social_linkedin: '💼',
   social_instagram: '📷',
   social_twitter: '🐦',
@@ -305,6 +311,111 @@ function HIBPData({ data }: { data: Record<string, unknown> }) {
   )
 }
 
+function TransparencyData({ data }: { data: Record<string, unknown> }) {
+  if (data.skipped) return <p className="text-sm text-gray-400">Chave TRANSPARENCIA_API_KEY não configurada.</p>
+
+  const pep = (data.pep as Array<Record<string, unknown>>) || []
+  const servidores = (data.servidores as Array<Record<string, unknown>>) || []
+  const ceis = (data.ceis as Array<Record<string, unknown>>) || []
+  const cnep = (data.cnep as Array<Record<string, unknown>>) || []
+
+  const total = pep.length + servidores.length + ceis.length + cnep.length
+  if (total === 0) return <p className="text-sm text-green-700 font-medium">Nenhum registro encontrado.</p>
+
+  const Section = ({ title, items, color }: { title: string; items: Array<Record<string, unknown>>; color: string }) => {
+    if (!items.length) return null
+    return (
+      <div>
+        <p className={`text-xs font-bold uppercase tracking-wide mb-1 ${color}`}>{title} ({items.length})</p>
+        <div className="space-y-1">
+          {items.slice(0, 5).map((item, i) => {
+            const name = String(item.nome || item.nomeCompleto || item.razaoSocial || '')
+            const role = String(item.funcaoDescricao || item.descricaoFuncao || item.cargo || item.tipoPena || item.descricaoTipoPena || '')
+            const org = String(item.nomeOrgao || item.orgaoNome || item.orgaoSancionador || item.siglaOrgaoSuperior || '')
+            return (
+              <div key={i} className="text-xs bg-gray-50 rounded px-2 py-1.5">
+                {name && <span className="font-medium block">{name}</span>}
+                {role && <span className="text-gray-600">{role}</span>}
+                {org && <span className="text-gray-500 ml-1">· {org}</span>}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      <Section title="Sanções CEIS/CNEP" items={[...ceis, ...cnep]} color="text-red-700" />
+      <Section title="PEP federal" items={pep} color="text-orange-700" />
+      <Section title="Servidor federal" items={servidores} color="text-blue-700" />
+      <a
+        href="https://portaldatransparencia.gov.br"
+        target="_blank" rel="noopener noreferrer"
+        className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline mt-1 font-medium"
+      >
+        Consultar Portal da Transparência →
+      </a>
+    </div>
+  )
+}
+
+function GazettesData({ data }: { data: Record<string, unknown> }) {
+  const results = (data.results as Array<{
+    date: string; territory_name: string; state_code: string; excerpt: string; url: string
+  }>) || []
+  if (results.length === 0) return <p className="text-sm text-gray-500">Nenhuma publicação encontrada.</p>
+  return (
+    <div className="space-y-2">
+      {results.slice(0, 8).map((r, i) => (
+        <div key={i} className="border-l-2 border-gray-200 pl-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-medium text-gray-700">{r.territory_name}{r.state_code ? ` — ${r.state_code}` : ''}</span>
+            <span className="text-xs text-gray-400">{r.date}</span>
+          </div>
+          {r.excerpt && (
+            <p className="text-xs text-gray-600 mt-0.5 line-clamp-2"
+               dangerouslySetInnerHTML={{ __html: r.excerpt.replace(/<\/?em>/g, '') }} />
+          )}
+          {r.url && (
+            <a href={r.url} target="_blank" rel="noopener noreferrer"
+               className="text-xs text-blue-600 hover:underline">Ver publicação →</a>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function CourtData({ data }: { data: Record<string, unknown> }) {
+  if (data.skipped) return <p className="text-sm text-gray-400">Chave DATAJUD_API_KEY não configurada.</p>
+  const processes = (data.processes as Array<{
+    numero: string; tribunal: string; classe: string; data_ajuizamento: string; assuntos: string[]; url: string
+  }>) || []
+  if (processes.length === 0) return <p className="text-sm text-green-700 font-medium">Nenhum processo encontrado nos tribunais federais.</p>
+  return (
+    <div className="space-y-2">
+      {processes.slice(0, 10).map((p, i) => (
+        <div key={i} className="bg-gray-50 border border-gray-200 rounded p-2 text-xs">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <span className="font-mono font-medium text-gray-800">{p.numero}</span>
+            <span className="text-gray-500 shrink-0">{p.tribunal} · {p.data_ajuizamento?.slice(0, 10)}</span>
+          </div>
+          {p.classe && <p className="text-gray-600 mt-0.5">{p.classe}</p>}
+          {p.assuntos?.length > 0 && (
+            <p className="text-gray-500 mt-0.5">Assunto: {p.assuntos.join(' · ')}</p>
+          )}
+          {p.url && (
+            <a href={p.url} target="_blank" rel="noopener noreferrer"
+               className="text-blue-600 hover:underline mt-1 inline-block">Consultar processo →</a>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function SourceBody({ source }: { source: SourceFinding }) {
   const data = (source.findings?.data as Record<string, unknown>) || {}
   const summary = (source.findings?.summary as string) || ''
@@ -324,6 +435,9 @@ function SourceBody({ source }: { source: SourceFinding }) {
       qsa_search: <QSAData data={data} />,
       negative_media: <MediaData data={data} />,
       restrictive_lists: <ListsData data={data} />,
+      transparency_gov: <TransparencyData data={data} />,
+      gazettes: <GazettesData data={data} />,
+      court_records: <CourtData data={data} />,
       hibp: <HIBPData data={data} />,
     }
 

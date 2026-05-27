@@ -18,6 +18,8 @@ class RiskScore(BaseModel):
     corporate: float
     media: float
     lists: float
+    government: float
+    legal: float
     social: float
     email: float
 
