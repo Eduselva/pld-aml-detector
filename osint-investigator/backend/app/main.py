@@ -69,5 +69,8 @@ if os.path.isdir(STATIC_DIR):
     async def serve_frontend(full_path: str):
         index = os.path.join(STATIC_DIR, "index.html")
         if os.path.exists(index):
-            return FileResponse(index)
+            return FileResponse(
+                index,
+                headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"},
+            )
         return {"error": "Frontend não encontrado"}
