@@ -23,6 +23,13 @@ SERPER_URL = "https://google.serper.dev/search"
 
 CNPJ_RE = re.compile(r"\d{2}[\.\s]?\d{3}[\.\s]?\d{3}[\/\s]?\d{4}[-\s]?\d{2}")
 
+
+def _cnpj_detail_url(cnpj: str) -> str:
+    """Return a public, human-readable CNPJ lookup URL."""
+    d = re.sub(r"\D", "", cnpj)
+    # econodata.com.br accepts raw 14-digit CNPJ and shows full company details
+    return f"https://www.econodata.com.br/empresas/{d}"
+
 # High-risk CNAE codes (narcotráfico, cambistas, etc.) — very basic list
 HIGH_RISK_CNAES = {"6492", "6499", "6611", "6619", "6622", "6629", "6810", "6820"}
 
@@ -97,7 +104,7 @@ class QSASearchSource(BaseSource):
                                 "data_entrada": item.get("data_entrada_sociedade", ""),
                                 "situacao": None,  # enriched below
                                 "match_score": round(score, 3),
-                                "detail_url": f"https://cnpj.info/{cnpj}",
+                                "detail_url": _cnpj_detail_url(cnpj),
                             })
                 if companies:
                     break
@@ -116,6 +123,11 @@ class QSASearchSource(BaseSource):
                 status = await self._fetch_cnpj_status(cnpj)
                 if status:
                     company["situacao"] = status
+
+        # Safety net: every company must have a consultation link
+        for company in companies:
+            if not company.get("detail_url") and company.get("cnpj"):
+                company["detail_url"] = _cnpj_detail_url(company["cnpj"])
 
         raw_score, alerts = self._compute_score(companies)
         total = len(companies)
@@ -195,6 +207,7 @@ class QSASearchSource(BaseSource):
                                 "situacao": None,
                                 "match_score": 0.0,
                                 "source_url": item.get("link", ""),
+                                "detail_url": _cnpj_detail_url(cnpj_clean),
                             })
             except Exception as e:
                 logger.debug(f"Serper QSA falhou: {e}")
