@@ -128,7 +128,8 @@ async def get_report(
                 media_score = sr.risk_contribution
             elif sr.source_name == "restrictive_lists":
                 lists_score = sr.risk_contribution
-            elif sr.source_name in ("social_linkedin", "social_instagram", "social_twitter", "social_tiktok"):
+            elif sr.source_name in ("social_linkedin", "social_instagram", "social_twitter", "social_tiktok",
+                                    "social_facebook", "social_pinterest", "social_flickr"):
                 social_score = max(social_score, sr.risk_contribution)
             elif sr.source_name == "hibp":
                 email_score = sr.risk_contribution

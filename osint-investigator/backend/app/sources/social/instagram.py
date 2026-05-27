@@ -15,8 +15,8 @@ class InstagramSource(BaseSource):
 
     async def collect(
         self,
-        entity_id: str,
-        entity_name: str,
+        entity_id: Optional[str] = None,
+        entity_name: Optional[str] = None,
         email: Optional[str] = None,
         nickname: Optional[str] = None,
         **kwargs: Any,

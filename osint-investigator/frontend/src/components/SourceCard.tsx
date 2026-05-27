@@ -14,6 +14,9 @@ const sourceLabels: Record<string, string> = {
   social_instagram: 'Instagram',
   social_twitter: 'Twitter/X',
   social_tiktok: 'TikTok',
+  social_facebook: 'Facebook',
+  social_pinterest: 'Pinterest',
+  social_flickr: 'Flickr',
   hibp: 'Inteligência de E-mail (HIBP)',
 }
 
@@ -26,6 +29,9 @@ const sourceIcons: Record<string, string> = {
   social_instagram: '📷',
   social_twitter: '🐦',
   social_tiktok: '🎵',
+  social_facebook: '👥',
+  social_pinterest: '📌',
+  social_flickr: '🖼️',
   hibp: '📧',
 }
 
@@ -169,8 +175,11 @@ function ListsData({ data }: { data: Record<string, unknown> }) {
 }
 
 function SocialData({ data }: { data: Record<string, unknown> }) {
-  const profiles = (data.found_profiles as Array<{ username: string; url: string; platform: string }>) || []
-  // For LinkedIn format
+  // found_profiles: Instagram, Twitter, TikTok, Facebook, Pinterest, Flickr
+  const profiles = (data.found_profiles as Array<{
+    username?: string; url: string; platform: string; title?: string; snippet?: string
+  }>) || []
+  // profiles: LinkedIn (search result format)
   const linkedinProfiles = (data.profiles as Array<{ title: string; url: string; snippet: string }>) || []
 
   if (profiles.length === 0 && linkedinProfiles.length === 0) {
@@ -180,21 +189,30 @@ function SocialData({ data }: { data: Record<string, unknown> }) {
   return (
     <div className="space-y-2">
       {linkedinProfiles.map((p, i) => (
-        <div key={i} className="flex items-start gap-2 text-sm">
+        <div key={i} className="text-sm">
           <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">
             {p.title}
           </a>
-          {p.snippet && <p className="text-xs text-gray-500">{p.snippet}</p>}
+          {p.snippet && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{p.snippet}</p>}
         </div>
       ))}
-      {profiles.map((p, i) => (
-        <div key={i} className="flex items-center gap-2 text-sm">
-          <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-            @{p.username}
-          </a>
-          <span className="text-gray-500 text-xs">({p.platform})</span>
-        </div>
-      ))}
+      {profiles.map((p, i) => {
+        // Use title (Serper result) when available and meaningful, else @username
+        const displayName = p.title && p.title.length > 0
+          ? p.title.replace(/ [–\-|·].*$/, '').trim()  // strip "Name - Platform"
+          : p.username ? `@${p.username}` : p.url
+        return (
+          <div key={i} className="text-sm">
+            <div className="flex items-center gap-2">
+              <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">
+                {displayName}
+              </a>
+              <span className="text-gray-400 text-xs">({p.platform})</span>
+            </div>
+            {p.snippet && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{p.snippet}</p>}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -213,6 +231,7 @@ function QSAData({ data }: { data: Record<string, unknown> }) {
     data_entrada: string
     situacao: string | null
     match_score: number
+    detail_url?: string
     source_url?: string
   }>) || []
   const sourceUsed = data.source as string | undefined
@@ -228,6 +247,7 @@ function QSAData({ data }: { data: Record<string, unknown> }) {
       )}
       {companies.map((c, i) => {
         const isIrregular = c.situacao && /INAPTA|BAIXADA|SUSPENSA|NULA/i.test(c.situacao)
+        const consultaUrl = c.detail_url || c.source_url
         return (
           <div key={i} className={`rounded p-3 text-sm border ${isIrregular ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
             <div className="flex items-start justify-between gap-2">
@@ -243,9 +263,10 @@ function QSAData({ data }: { data: Record<string, unknown> }) {
             <p className="text-xs text-gray-500 font-mono mt-0.5">{formatCNPJ(c.cnpj)}</p>
             {c.qualificacao && <p className="text-xs text-gray-600 mt-0.5">Qualificação: {c.qualificacao}</p>}
             {c.data_entrada && <p className="text-xs text-gray-500">Entrada: {c.data_entrada}</p>}
-            {c.source_url && (
-              <a href={c.source_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline mt-0.5 block">
-                Ver fonte
+            {consultaUrl && (
+              <a href={consultaUrl} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline mt-1.5 font-medium">
+                Consultar empresa →
               </a>
             )}
           </div>

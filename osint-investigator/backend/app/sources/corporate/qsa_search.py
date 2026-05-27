@@ -97,6 +97,7 @@ class QSASearchSource(BaseSource):
                                 "data_entrada": item.get("data_entrada_sociedade", ""),
                                 "situacao": None,  # enriched below
                                 "match_score": round(score, 3),
+                                "detail_url": f"https://cnpj.info/{cnpj}",
                             })
                 if companies:
                     break

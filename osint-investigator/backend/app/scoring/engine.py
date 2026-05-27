@@ -15,6 +15,9 @@ SOURCE_CATEGORY_MAP = {
     "social_instagram": "social",
     "social_twitter": "social",
     "social_tiktok": "social",
+    "social_facebook": "social",
+    "social_pinterest": "social",
+    "social_flickr": "social",
     "hibp": "email",
 }
 

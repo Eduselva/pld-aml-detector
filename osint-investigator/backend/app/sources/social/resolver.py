@@ -19,65 +19,70 @@ def extract_username_from_email(email: str) -> Optional[str]:
 
 
 def generate_candidate_usernames(
-    entity_name: str,
+    entity_name: Optional[str] = None,
     email: Optional[str] = None,
     nickname: Optional[str] = None,
 ) -> list[str]:
     """
-    Generate a ranked list of candidate usernames from name and email.
+    Generate a ranked list of candidate usernames from name, email, and nickname.
+    Nickname candidates are prioritised (placed near the top) since people
+    often register under their known alias rather than their legal name.
     """
-    parts = entity_name.strip().split()
-    if not parts:
-        return []
-
-    normalized_parts = [normalize_part(p) for p in parts if normalize_part(p)]
-    if not normalized_parts:
-        return []
-
     candidates: list[str] = []
 
-    first = normalized_parts[0]
-    last = normalized_parts[-1] if len(normalized_parts) > 1 else ""
-    middle_parts = normalized_parts[1:-1] if len(normalized_parts) > 2 else []
+    # 1. Email-derived username — highest signal when present
+    if email:
+        email_user = extract_username_from_email(email)
+        if email_user:
+            candidates.append(email_user)
 
-    if first and last:
-        candidates.append(f"{first}.{last}")         # joao.silva
-        candidates.append(f"{first}{last}")           # joaosilva
-        candidates.append(f"{first}_{last}")          # joao_silva
-        candidates.append(f"{first[0]}{last}")        # jsilva
-        candidates.append(f"{first}{last[0]}")        # joaos
-        candidates.append(f"{last}.{first}")          # silva.joao
-        candidates.append(f"{last}{first}")           # silvajoao
-        candidates.append(f"{last}_{first}")          # silva_joao
-        candidates.append(f"{first[0]}.{last}")       # j.silva
-
-    if first and not last:
-        candidates.append(first)
-
-    if middle_parts and first and last:
-        mid_initial = middle_parts[0][0] if middle_parts[0] else ""
-        if mid_initial:
-            candidates.append(f"{first}{mid_initial}{last}")   # joaomsilva
-
-    # From nickname
+    # 2. Nickname variants — prioritised over legal name
     if nickname and nickname.strip():
         nick = nickname.strip()
+        nick_norm = normalize_part(nick)
         nick_lower = nick.lower().replace(" ", "")
         nick_dot = nick.lower().replace(" ", ".")
-        nick_underscore = nick.lower().replace(" ", "_")
-        nick_normalized = normalize_part(nick)
-        for nc in [nick_lower, nick_dot, nick_underscore, nick_normalized]:
+        nick_under = nick.lower().replace(" ", "_")
+        for nc in [nick_norm, nick_lower, nick_dot, nick_under]:
             if nc and nc not in candidates:
                 candidates.append(nc)
 
-    # From email
-    if email:
-        email_user = extract_username_from_email(email)
-        if email_user and email_user not in candidates:
-            candidates.insert(0, email_user)
+    # 3. Legal name variants
+    if entity_name and entity_name.strip():
+        parts = entity_name.strip().split()
+        normalized_parts = [normalize_part(p) for p in parts if normalize_part(p)]
+        if normalized_parts:
+            first = normalized_parts[0]
+            last = normalized_parts[-1] if len(normalized_parts) > 1 else ""
+            middle_parts = normalized_parts[1:-1] if len(normalized_parts) > 2 else []
+
+            if first and last:
+                for variant in [
+                    f"{first}.{last}",    # joao.silva
+                    f"{first}{last}",      # joaosilva
+                    f"{first}_{last}",     # joao_silva
+                    f"{first[0]}{last}",   # jsilva
+                    f"{last}.{first}",     # silva.joao
+                    f"{last}{first}",      # silvajoao
+                    f"{first[0]}.{last}",  # j.silva
+                    f"{first}{last[0]}",   # joaos
+                    f"{last}_{first}",     # silva_joao
+                ]:
+                    if variant not in candidates:
+                        candidates.append(variant)
+
+                if middle_parts:
+                    mid = middle_parts[0][0] if middle_parts[0] else ""
+                    if mid:
+                        variant = f"{first}{mid}{last}"
+                        if variant not in candidates:
+                            candidates.append(variant)
+            elif first:
+                if first not in candidates:
+                    candidates.append(first)
 
     # Deduplicate preserving order
-    seen = set()
+    seen: set[str] = set()
     result = []
     for c in candidates:
         if c and c not in seen:

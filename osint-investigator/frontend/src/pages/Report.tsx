@@ -16,6 +16,9 @@ const SOURCE_META: Record<string, { label: string; icon: string }> = {
   social_instagram:  { label: 'Instagram',                icon: '📷' },
   social_twitter:    { label: 'Twitter / X',              icon: '🐦' },
   social_tiktok:     { label: 'TikTok',                   icon: '🎵' },
+  social_facebook:   { label: 'Facebook',                 icon: '👥' },
+  social_pinterest:  { label: 'Pinterest',                icon: '📌' },
+  social_flickr:     { label: 'Flickr',                   icon: '🖼️' },
   hibp:              { label: 'Vazamentos (HIBP)',         icon: '📧' },
 }
 

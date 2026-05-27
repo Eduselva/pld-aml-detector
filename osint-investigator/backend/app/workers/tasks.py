@@ -141,6 +141,9 @@ def _build_source_tasks(entity_name: str, entity_type: str, entity_id: str, emai
     from app.sources.social.instagram import InstagramSource
     from app.sources.social.twitter import TwitterSource
     from app.sources.social.tiktok import TikTokSource
+    from app.sources.social.facebook import FacebookSource
+    from app.sources.social.pinterest import PinterestSource
+    from app.sources.social.flickr import FlickrSource
 
     tasks = []
 
@@ -162,10 +165,13 @@ def _build_source_tasks(entity_name: str, entity_type: str, entity_id: str, emai
     else:
         tasks.append(("hibp", _empty_source("hibp")))
 
-    tasks.append(("social_linkedin", LinkedInSource().collect(entity_id=entity_id, entity_name=entity_name, nickname=nickname)))
+    tasks.append(("social_linkedin",  LinkedInSource().collect(entity_id=entity_id, entity_name=entity_name, nickname=nickname)))
     tasks.append(("social_instagram", InstagramSource().collect(entity_id=entity_id, entity_name=entity_name, email=email, nickname=nickname)))
-    tasks.append(("social_twitter", TwitterSource().collect(entity_id=entity_id, entity_name=entity_name, email=email, nickname=nickname)))
-    tasks.append(("social_tiktok", TikTokSource().collect(entity_id=entity_id, entity_name=entity_name, email=email, nickname=nickname)))
+    tasks.append(("social_twitter",   TwitterSource().collect(entity_id=entity_id, entity_name=entity_name, email=email, nickname=nickname)))
+    tasks.append(("social_tiktok",    TikTokSource().collect(entity_id=entity_id, entity_name=entity_name, email=email, nickname=nickname)))
+    tasks.append(("social_facebook",  FacebookSource().collect(entity_id=entity_id, entity_name=entity_name, email=email, nickname=nickname)))
+    tasks.append(("social_pinterest", PinterestSource().collect(entity_id=entity_id, entity_name=entity_name, email=email, nickname=nickname)))
+    tasks.append(("social_flickr",    FlickrSource().collect(entity_id=entity_id, entity_name=entity_name, email=email, nickname=nickname)))
 
     return tasks
 
