@@ -41,3 +41,16 @@ class DossierReport(BaseModel):
     risk_score: Optional[RiskScore] = None
     alerts: list[Alert] = []
     sources: list[SourceFinding] = []
+
+
+class HistoryEntry(BaseModel):
+    id: str
+    created_at: datetime
+    risk_score: Optional[float]
+    risk_level: Optional[str]
+    alerts: list[Alert] = []
+    source_scores: dict[str, float] = {}
+
+
+class InvestigationHistory(BaseModel):
+    entries: list[HistoryEntry]  # all investigations for same entity, newest first (includes current)

@@ -8,7 +8,7 @@ from sqlalchemy import select, desc
 from app.database import get_db
 from app.models.investigation import Investigation, SourceResult
 from app.schemas.investigation import InvestigationCreate, InvestigationResponse, InvestigationListResponse
-from app.schemas.report import DossierReport, RiskScore, SourceFinding, Alert
+from app.schemas.report import DossierReport, RiskScore, SourceFinding, Alert, HistoryEntry, InvestigationHistory
 
 router = APIRouter(prefix="/api/v1", tags=["investigations"])
 
@@ -187,6 +187,64 @@ async def get_report(
         alerts=alerts,
         sources=sources,
     )
+
+
+@router.get("/investigations/{investigation_id}/history", response_model=InvestigationHistory)
+async def get_history(
+    investigation_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Investigation).where(Investigation.id == investigation_id)
+    )
+    current = result.scalar_one_or_none()
+    if not current:
+        raise HTTPException(status_code=404, detail="Investigação não encontrada")
+
+    # Find all completed investigations for the same entity
+    query = select(Investigation).where(
+        Investigation.status == "complete",
+        Investigation.entity_type == current.entity_type,
+    )
+    if current.entity_id:
+        query = query.where(Investigation.entity_id == current.entity_id)
+    else:
+        name_key = current.entity_name or current.nickname
+        query = query.where(
+            (Investigation.entity_name == name_key) | (Investigation.nickname == name_key)
+        )
+    query = query.order_by(desc(Investigation.created_at))
+
+    all_inv = (await db.execute(query)).scalars().all()
+
+    entries: list[HistoryEntry] = []
+    for inv in all_inv:
+        src_result = await db.execute(
+            select(SourceResult).where(SourceResult.investigation_id == inv.id)
+        )
+        sources = src_result.scalars().all()
+
+        alerts: list[Alert] = []
+        source_scores: dict[str, float] = {}
+        for sr in sources:
+            source_scores[sr.source_name] = sr.risk_contribution
+            if sr.findings and isinstance(sr.findings, dict):
+                for a in sr.findings.get("alerts", []):
+                    alerts.append(Alert(**a))
+
+        severity_order = {"critical": 0, "danger": 1, "warning": 2, "info": 3}
+        alerts.sort(key=lambda a: severity_order.get(a.severity, 99))
+
+        entries.append(HistoryEntry(
+            id=inv.id,
+            created_at=inv.created_at,
+            risk_score=inv.risk_score,
+            risk_level=inv.risk_level,
+            alerts=alerts,
+            source_scores=source_scores,
+        ))
+
+    return InvestigationHistory(entries=entries)
 
 
 @router.delete("/investigations/{investigation_id}", status_code=status.HTTP_204_NO_CONTENT)

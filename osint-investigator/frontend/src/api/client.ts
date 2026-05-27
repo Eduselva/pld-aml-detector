@@ -3,6 +3,7 @@ import type {
   InvestigationCreate,
   InvestigationListResponse,
   DossierReport,
+  InvestigationHistory,
 } from '../types'
 
 const BASE_URL = '/api/v1'
@@ -56,5 +57,9 @@ export const api = {
 
   async deleteInvestigation(id: string): Promise<void> {
     return request<void>(`/investigations/${id}`, { method: 'DELETE' })
+  },
+
+  async getHistory(id: string): Promise<InvestigationHistory> {
+    return request<InvestigationHistory>(`/investigations/${id}/history`)
   },
 }

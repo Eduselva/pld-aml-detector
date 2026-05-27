@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api/client'
-import type { DossierReport, Investigation } from '../types'
+import type { DossierReport, Investigation, InvestigationHistory } from '../types'
 import RiskGauge from '../components/RiskGauge'
 import AlertBadge from '../components/AlertBadge'
 import SourceCard from '../components/SourceCard'
 import StatusBadge from '../components/StatusBadge'
+import HistoryPanel from '../components/HistoryPanel'
 
 const SOURCE_META: Record<string, { label: string; icon: string }> = {
   cnpj:              { label: 'CNPJ / Receita Federal',       icon: '🏢' },
@@ -129,6 +130,7 @@ export default function Report() {
   const { id } = useParams<{ id: string }>()
   const [investigation, setInvestigation] = useState<Investigation | null>(null)
   const [report, setReport] = useState<DossierReport | null>(null)
+  const [history, setHistory] = useState<InvestigationHistory | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [visibleSources, setVisibleSources] = useState<Set<string>>(new Set(SOURCE_ORDER))
@@ -142,9 +144,9 @@ export default function Report() {
       if (inv.status === 'complete' || inv.status === 'failed') {
         if (pollRef.current) clearInterval(pollRef.current)
         if (inv.status === 'complete') {
-          const rep = await api.getReport(id)
+          const [rep, hist] = await Promise.all([api.getReport(id), api.getHistory(id)])
           setReport(rep)
-          // Initialize filter with all returned sources visible
+          setHistory(hist)
           setVisibleSources(new Set(rep.sources.map((s) => s.source_name)))
         }
       }
@@ -274,6 +276,11 @@ export default function Report() {
                 {report.risk_score && <ScoreBreakdown score={report.risk_score} />}
               </div>
             </div>
+
+            {/* History */}
+            {history && history.entries.length > 1 && (
+              <HistoryPanel currentId={id!} entries={history.entries} />
+            )}
 
             {/* Alerts */}
             {report.alerts.length > 0 && (

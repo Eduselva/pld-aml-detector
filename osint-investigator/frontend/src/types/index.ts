@@ -60,6 +60,19 @@ export interface SourceFinding {
   error_message?: string | null
 }
 
+export interface HistoryEntry {
+  id: string
+  created_at: string
+  risk_score?: number | null
+  risk_level?: string | null
+  alerts: Alert[]
+  source_scores: Record<string, number>
+}
+
+export interface InvestigationHistory {
+  entries: HistoryEntry[]
+}
+
 export interface DossierReport {
   investigation_id: string
   entity_name?: string | null
