@@ -320,7 +320,7 @@ export default function Report() {
             </div>
 
             <p className="text-xs text-gray-400 text-center pb-4">
-              Relatório gerado em {formatDate(report.created_at)} · OSINT Investigador v1.0
+              Relatório gerado em {formatDate(report.created_at)} · OSINT Investigador v1.1
             </p>
           </div>
         )}
