@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
-from typing import List
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from typing import List, Optional
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 
@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models.investigation import Investigation, SourceResult
 from app.schemas.investigation import InvestigationCreate, InvestigationResponse, InvestigationListResponse
 from app.schemas.report import DossierReport, RiskScore, SourceFinding, Alert, HistoryEntry, InvestigationHistory, GraphNodeOut, GraphEdgeOut, GraphEdgeCreate, GraphStats, GraphResponse
+from app.schemas.case import CaseCreate, CaseUpdate, CaseOut
 
 router = APIRouter(prefix="/api/v1", tags=["investigations"])
 
@@ -248,23 +249,69 @@ async def get_history(
 
 
 @router.get("/graph", response_model=GraphResponse)
-async def get_graph(db: AsyncSession = Depends(get_db)):
+async def get_graph(
+    db: AsyncSession = Depends(get_db),
+    case_id: Optional[str] = Query(default=None),
+):
     from app.models.graph import GraphNode, GraphEdge
+    from app.models.case import CaseInvestigation
     from collections import defaultdict
 
-    nodes_result = await db.execute(select(GraphNode))
-    nodes = nodes_result.scalars().all()
+    if case_id:
+        # Resolve investigations belonging to the case
+        ci_result = await db.execute(
+            select(CaseInvestigation).where(CaseInvestigation.case_id == case_id)
+        )
+        case_inv_ids = {ci.investigation_id for ci in ci_result.scalars().all()}
 
-    edges_result = await db.execute(select(GraphEdge))
-    edges = edges_result.scalars().all()
+        # Subject nodes for those investigations
+        subj_result = await db.execute(
+            select(GraphNode).where(
+                GraphNode.type == "subject",
+                GraphNode.investigation_id.in_(case_inv_ids),
+            )
+        )
+        subject_nodes = subj_result.scalars().all()
+        subject_ids = {n.id for n in subject_nodes}
 
-    # Compute shared_entities: non-subject nodes connected to 2+ distinct subject nodes
-    subject_ids = {n.id for n in nodes if n.type == "subject"}
+        # Edges: auto edges from case subjects, manual edges only if both endpoints are case subjects
+        all_edges_result = await db.execute(select(GraphEdge))
+        all_edges = all_edges_result.scalars().all()
+        edges = []
+        extra_node_ids: set[str] = set()
+        for e in all_edges:
+            src_is_subj = e.source_id in subject_ids
+            tgt_is_subj = e.target_id in subject_ids
+            if e.is_manual:
+                if src_is_subj and tgt_is_subj:
+                    edges.append(e)
+            else:
+                if src_is_subj:
+                    edges.append(e)
+                    extra_node_ids.add(e.target_id)
+
+        # Fetch referenced entity nodes
+        all_node_ids = subject_ids | extra_node_ids
+        if all_node_ids:
+            nodes_result = await db.execute(
+                select(GraphNode).where(GraphNode.id.in_(all_node_ids))
+            )
+            nodes = nodes_result.scalars().all()
+        else:
+            nodes = list(subject_nodes)
+    else:
+        nodes_result = await db.execute(select(GraphNode))
+        nodes = nodes_result.scalars().all()
+        edges_result = await db.execute(select(GraphEdge))
+        edges = edges_result.scalars().all()
+
+    # Compute shared_entities: entity nodes connected to 2+ distinct subject nodes
+    subject_ids_all = {n.id for n in nodes if n.type == "subject"}
     node_to_subjects: dict[str, set[str]] = defaultdict(set)
     for edge in edges:
-        if edge.source_id in subject_ids:
+        if edge.source_id in subject_ids_all:
             node_to_subjects[edge.target_id].add(edge.source_id)
-    shared_entities = sum(1 for subjects in node_to_subjects.values() if len(subjects) >= 2)
+    shared_entities = sum(1 for subjs in node_to_subjects.values() if len(subjs) >= 2)
 
     stats = GraphStats(
         subjects=sum(1 for n in nodes if n.type == "subject"),
@@ -336,6 +383,145 @@ async def delete_graph_edge(
         raise HTTPException(status_code=400, detail="Apenas conexões manuais podem ser removidas")
     await db.delete(edge)
     await db.commit()
+
+
+# ── Cases ────────────────────────────────────────────────────────────────────
+
+@router.post("/cases", response_model=CaseOut, status_code=status.HTTP_201_CREATED)
+async def create_case(payload: CaseCreate, db: AsyncSession = Depends(get_db)):
+    from app.models.case import Case
+
+    case = Case(id=str(uuid.uuid4()), name=payload.name.strip(), description=payload.description)
+    db.add(case)
+    await db.commit()
+    await db.refresh(case)
+    return CaseOut(
+        id=case.id, name=case.name, description=case.description,
+        created_at=case.created_at, investigation_ids=[], investigation_count=0,
+    )
+
+
+@router.get("/cases", response_model=list[CaseOut])
+async def list_cases(db: AsyncSession = Depends(get_db)):
+    from app.models.case import Case, CaseInvestigation
+    from collections import defaultdict
+
+    cases_result = await db.execute(select(Case).order_by(Case.created_at))
+    cases = cases_result.scalars().all()
+
+    ci_result = await db.execute(select(CaseInvestigation))
+    ci_all = ci_result.scalars().all()
+
+    inv_ids_by_case: dict[str, list[str]] = defaultdict(list)
+    for ci in ci_all:
+        inv_ids_by_case[ci.case_id].append(ci.investigation_id)
+
+    return [
+        CaseOut(
+            id=c.id, name=c.name, description=c.description, created_at=c.created_at,
+            investigation_ids=inv_ids_by_case.get(c.id, []),
+            investigation_count=len(inv_ids_by_case.get(c.id, [])),
+        )
+        for c in cases
+    ]
+
+
+@router.get("/cases/{case_id}", response_model=CaseOut)
+async def get_case(case_id: str, db: AsyncSession = Depends(get_db)):
+    from app.models.case import Case, CaseInvestigation
+
+    case = await db.get(Case, case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Caso não encontrado")
+
+    ci_result = await db.execute(
+        select(CaseInvestigation).where(CaseInvestigation.case_id == case_id)
+    )
+    inv_ids = [ci.investigation_id for ci in ci_result.scalars().all()]
+    return CaseOut(
+        id=case.id, name=case.name, description=case.description,
+        created_at=case.created_at, investigation_ids=inv_ids,
+        investigation_count=len(inv_ids),
+    )
+
+
+@router.put("/cases/{case_id}", response_model=CaseOut)
+async def update_case(case_id: str, payload: CaseUpdate, db: AsyncSession = Depends(get_db)):
+    from app.models.case import Case, CaseInvestigation
+
+    case = await db.get(Case, case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Caso não encontrado")
+    if payload.name is not None:
+        case.name = payload.name.strip()
+    if payload.description is not None:
+        case.description = payload.description
+    await db.commit()
+    await db.refresh(case)
+
+    ci_result = await db.execute(
+        select(CaseInvestigation).where(CaseInvestigation.case_id == case_id)
+    )
+    inv_ids = [ci.investigation_id for ci in ci_result.scalars().all()]
+    return CaseOut(
+        id=case.id, name=case.name, description=case.description,
+        created_at=case.created_at, investigation_ids=inv_ids,
+        investigation_count=len(inv_ids),
+    )
+
+
+@router.delete("/cases/{case_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_case(case_id: str, db: AsyncSession = Depends(get_db)):
+    from app.models.case import Case
+
+    case = await db.get(Case, case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Caso não encontrado")
+    await db.delete(case)
+    await db.commit()
+
+
+@router.post("/cases/{case_id}/investigations/{investigation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def add_investigation_to_case(
+    case_id: str, investigation_id: str, db: AsyncSession = Depends(get_db)
+):
+    from app.models.case import Case, CaseInvestigation
+
+    case = await db.get(Case, case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Caso não encontrado")
+
+    inv = await db.get(Investigation, investigation_id)
+    if not inv:
+        raise HTTPException(status_code=404, detail="Investigação não encontrada")
+
+    existing = await db.execute(
+        select(CaseInvestigation).where(
+            CaseInvestigation.case_id == case_id,
+            CaseInvestigation.investigation_id == investigation_id,
+        )
+    )
+    if existing.scalar_one_or_none() is None:
+        db.add(CaseInvestigation(case_id=case_id, investigation_id=investigation_id))
+        await db.commit()
+
+
+@router.delete("/cases/{case_id}/investigations/{investigation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_investigation_from_case(
+    case_id: str, investigation_id: str, db: AsyncSession = Depends(get_db)
+):
+    from app.models.case import CaseInvestigation
+
+    ci = await db.execute(
+        select(CaseInvestigation).where(
+            CaseInvestigation.case_id == case_id,
+            CaseInvestigation.investigation_id == investigation_id,
+        )
+    )
+    ci_obj = ci.scalar_one_or_none()
+    if ci_obj:
+        await db.delete(ci_obj)
+        await db.commit()
 
 
 @router.delete("/investigations/{investigation_id}", status_code=status.HTTP_204_NO_CONTENT)

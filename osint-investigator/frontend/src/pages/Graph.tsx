@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
-import type { GraphResponse, GraphNodeOut, GraphEdgeOut } from '../types'
+import type { GraphResponse, GraphNodeOut, GraphEdgeOut, Case, Investigation } from '../types'
 
 const W = 860
 const H = 540
@@ -40,7 +40,6 @@ function runForce(nodes: GraphNodeOut[], edges: GraphEdgeOut[]): Pos {
   if (nodes.length === 0) return {}
 
   const pos: Record<string, { x: number; y: number; vx: number; vy: number }> = {}
-
   const subjects = nodes.filter(n => n.type === 'subject')
   const others = nodes.filter(n => n.type !== 'subject')
 
@@ -56,7 +55,6 @@ function runForce(nodes: GraphNodeOut[], edges: GraphEdgeOut[]): Pos {
   })
 
   const k = Math.sqrt((W * H) / Math.max(nodes.length, 1)) * 0.7
-
   for (let iter = 0; iter < 250; iter++) {
     for (let i = 0; i < nodes.length; i++) {
       for (let j = i + 1; j < nodes.length; j++) {
@@ -90,16 +88,12 @@ function runForce(nodes: GraphNodeOut[], edges: GraphEdgeOut[]): Pos {
       p.vx *= 0.84; p.vy *= 0.84
     }
   }
-
   return Object.fromEntries(Object.entries(pos).map(([id, { x, y }]) => [id, { x, y }]))
 }
 
 function NodeShape({ node, pos, hovered, onHover, onClick }: {
-  node: GraphNodeOut
-  pos: { x: number; y: number }
-  hovered: boolean
-  onHover: (id: string | null) => void
-  onClick: () => void
+  node: GraphNodeOut; pos: { x: number; y: number }
+  hovered: boolean; onHover: (id: string | null) => void; onClick: () => void
 }) {
   const isSubject = node.type === 'subject'
   const isCompany = node.type === 'company'
@@ -110,11 +104,9 @@ function NodeShape({ node, pos, hovered, onHover, onClick }: {
   const label = node.label.length > 18 ? node.label.slice(0, 16) + '…' : node.label
 
   return (
-    <g
-      transform={`translate(${pos.x},${pos.y})`}
+    <g transform={`translate(${pos.x},${pos.y})`}
       style={{ cursor: isSubject ? 'pointer' : 'default' }}
-      onMouseEnter={() => onHover(node.id)}
-      onMouseLeave={() => onHover(null)}
+      onMouseEnter={() => onHover(node.id)} onMouseLeave={() => onHover(null)}
       onClick={isSubject ? onClick : undefined}
     >
       {isCompany ? (
@@ -126,13 +118,8 @@ function NodeShape({ node, pos, hovered, onHover, onClick }: {
           fill={hovered ? color + 'cc' : color + (isSubject ? '' : '55')}
           stroke={color} strokeWidth={isSubject ? 2 : 1.5} />
       )}
-      <text
-        y={isCompany ? 5 : r + 13}
-        textAnchor="middle"
-        fontSize={isSubject ? 11 : 10}
-        fontWeight={isSubject ? '600' : '400'}
-        fill="#374151"
-      >
+      <text y={isCompany ? 5 : r + 13} textAnchor="middle"
+        fontSize={isSubject ? 11 : 10} fontWeight={isSubject ? '600' : '400'} fill="#374151">
         {label}
       </text>
       {isSubject && node.risk_score != null && (
@@ -150,17 +137,32 @@ export default function Graph() {
   const [error, setError] = useState<string | null>(null)
   const [hovered, setHovered] = useState<string | null>(null)
   const [hoveredEdge, setHoveredEdge] = useState<string | null>(null)
+
+  // Case state
+  const [cases, setCases] = useState<Case[]>([])
+  const [activeCaseId, setActiveCaseId] = useState<string | null>(null)
+  const [showNewCaseModal, setShowNewCaseModal] = useState(false)
+  const [managingCase, setManagingCase] = useState<Case | null>(null)
+  const [newCaseName, setNewCaseName] = useState('')
+  const [newCaseDesc, setNewCaseDesc] = useState('')
+  const [caseLoading, setCaseLoading] = useState(false)
+  const [allInvestigations, setAllInvestigations] = useState<Investigation[]>([])
+  const [renamingCase, setRenamingCase] = useState(false)
+  const [renameValue, setRenameValue] = useState('')
+
+  // Link state
   const [showLinkModal, setShowLinkModal] = useState(false)
   const [linkNodeA, setLinkNodeA] = useState('')
   const [linkNodeB, setLinkNodeB] = useState('')
   const [linkRelType, setLinkRelType] = useState('cônjuge')
   const [linkCustomLabel, setLinkCustomLabel] = useState('')
   const [linkLoading, setLinkLoading] = useState(false)
+
   const navigate = useNavigate()
 
-  const fetchGraph = useCallback(async () => {
+  const fetchGraph = useCallback(async (caseId?: string | null) => {
     try {
-      const data = await api.getGraph()
+      const data = await api.getGraph(caseId)
       setGraph(data)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao carregar grafo')
@@ -169,7 +171,28 @@ export default function Graph() {
     }
   }, [])
 
-  useEffect(() => { fetchGraph() }, [fetchGraph])
+  const fetchCases = useCallback(async () => {
+    try {
+      const data = await api.listCases()
+      setCases(data)
+    } catch { /* non-fatal */ }
+  }, [])
+
+  const fetchInvestigations = useCallback(async () => {
+    try {
+      const data = await api.listInvestigations(0, 200)
+      setAllInvestigations(data.investigations.filter(i => i.status === 'complete'))
+    } catch { /* non-fatal */ }
+  }, [])
+
+  useEffect(() => {
+    fetchGraph(activeCaseId)
+  }, [activeCaseId, fetchGraph])
+
+  useEffect(() => {
+    fetchCases()
+    fetchInvestigations()
+  }, [fetchCases, fetchInvestigations])
 
   const positions = useMemo(() => {
     if (!graph || graph.nodes.length === 0) return {}
@@ -186,21 +209,89 @@ export default function Graph() {
     return connected
   }, [hovered, graph])
 
+  // ── Case handlers ─────────────────────────────────────────────────────────
+
+  const handleCreateCase = async () => {
+    if (!newCaseName.trim()) return
+    setCaseLoading(true)
+    try {
+      const created = await api.createCase({ name: newCaseName.trim(), description: newCaseDesc.trim() || null })
+      await fetchCases()
+      setShowNewCaseModal(false)
+      setNewCaseName(''); setNewCaseDesc('')
+      // Open manage modal immediately so user can add investigations
+      setManagingCase(created)
+      setActiveCaseId(created.id)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erro ao criar caso')
+    } finally {
+      setCaseLoading(false)
+    }
+  }
+
+  const handleDeleteCase = async (id: string) => {
+    if (!window.confirm('Excluir este caso? As investigações não serão removidas.')) return
+    try {
+      await api.deleteCase(id)
+      if (activeCaseId === id) setActiveCaseId(null)
+      setManagingCase(null)
+      await fetchCases()
+      await fetchGraph(null)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erro ao excluir caso')
+    }
+  }
+
+  const handleRenameCase = async () => {
+    if (!managingCase || !renameValue.trim()) return
+    try {
+      const updated = await api.updateCase(managingCase.id, { name: renameValue.trim() })
+      setManagingCase(updated)
+      setCases(prev => prev.map(c => c.id === updated.id ? updated : c))
+      setRenamingCase(false)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erro ao renomear')
+    }
+  }
+
+  const handleAddInv = async (invId: string) => {
+    if (!managingCase) return
+    try {
+      await api.addInvestigationToCase(managingCase.id, invId)
+      const updated = await api.listCases()
+      setCases(updated)
+      const updatedCase = updated.find(c => c.id === managingCase.id)
+      if (updatedCase) setManagingCase(updatedCase)
+      await fetchGraph(activeCaseId)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erro ao adicionar investigação')
+    }
+  }
+
+  const handleRemoveInv = async (invId: string) => {
+    if (!managingCase) return
+    try {
+      await api.removeInvestigationFromCase(managingCase.id, invId)
+      const updated = await api.listCases()
+      setCases(updated)
+      const updatedCase = updated.find(c => c.id === managingCase.id)
+      if (updatedCase) setManagingCase(updatedCase)
+      await fetchGraph(activeCaseId)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erro ao remover investigação')
+    }
+  }
+
+  // ── Link handlers ─────────────────────────────────────────────────────────
+
   const handleLink = async () => {
     if (!linkNodeA || !linkNodeB) return
     setLinkLoading(true)
-    const label =
-      linkCustomLabel.trim() ||
-      RELATIONSHIP_OPTIONS.find(o => o.value === linkRelType)?.label ||
-      linkRelType
+    const label = linkCustomLabel.trim() ||
+      RELATIONSHIP_OPTIONS.find(o => o.value === linkRelType)?.label || linkRelType
     try {
-      await api.createGraphEdge({
-        source_node_id: linkNodeA,
-        target_node_id: linkNodeB,
-        relationship_type: linkRelType,
-        label,
-      })
-      await fetchGraph()
+      await api.createGraphEdge({ source_node_id: linkNodeA, target_node_id: linkNodeB, relationship_type: linkRelType, label })
+      await fetchGraph(activeCaseId)
       setShowLinkModal(false)
       setLinkNodeA(''); setLinkNodeB(''); setLinkRelType('cônjuge'); setLinkCustomLabel('')
     } catch (e) {
@@ -214,18 +305,19 @@ export default function Graph() {
     if (!window.confirm('Remover esta conexão manual?')) return
     try {
       await api.deleteGraphEdge(edgeId)
-      await fetchGraph()
+      await fetchGraph(activeCaseId)
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erro ao remover conexão')
     }
   }
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
     </div>
   )
-
   if (error) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <p className="text-red-600">{error}</p>
@@ -238,60 +330,128 @@ export default function Graph() {
   const subjects = nodes.filter(n => n.type === 'subject')
   const noInvestigations = subjects.length === 0
   const hasAnyConnection = (stats?.shared_entities ?? 0) > 0 || edges.some(e => e.is_manual)
+  const activeCase = cases.find(c => c.id === activeCaseId)
+
+  // Investigations not yet in the managing case
+  const invNotInCase = managingCase
+    ? allInvestigations.filter(i => !managingCase.investigation_ids.includes(i.id))
+    : []
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* ── Main header ── */}
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link to="/dashboard" className="text-gray-400 hover:text-gray-600 text-sm">← Voltar</Link>
             <div>
-              <h1 className="text-lg font-bold text-gray-900">🕸️ Rede de Relações</h1>
-              <p className="text-xs text-gray-500">Vínculos entre investigados</p>
+              <h1 className="text-lg font-bold text-gray-900">
+                🕸️ {activeCase ? activeCase.name : 'Rede de Relações'}
+              </h1>
+              <p className="text-xs text-gray-500">
+                {activeCase ? 'Caso — filtro ativo' : 'Todos os investigados'}
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
+
+          <div className="flex items-center gap-3">
             {stats && (
               <div className="flex items-center gap-4 text-sm text-gray-600">
                 <span><strong>{stats.subjects}</strong> investigados</span>
                 <span><strong>{stats.companies}</strong> empresas</span>
-                <span><strong>{stats.partners}</strong> sócios</span>
                 {stats.shared_entities > 0 && (
                   <span className="text-orange-600 font-semibold">
-                    🔗 {stats.shared_entities} conexão(ões) compartilhada(s)
+                    🔗 {stats.shared_entities} conexão(ões)
                   </span>
                 )}
               </div>
+            )}
+            {activeCase && (
+              <button
+                onClick={() => { setManagingCase(activeCase); setRenamingCase(false); setRenameValue(activeCase.name) }}
+                className="text-xs text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3 py-1.5 rounded-lg font-semibold transition-colors"
+              >
+                ⚙ Gerenciar caso
+              </button>
             )}
             {subjects.length >= 2 && (
               <button
                 onClick={() => setShowLinkModal(true)}
                 className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors shadow-sm"
               >
-                🔗 Vincular investigados
+                🔗 Vincular
               </button>
             )}
           </div>
         </div>
+
+        {/* ── Case filter bar ── */}
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 pb-2 flex items-center gap-2 overflow-x-auto">
+          <button
+            onClick={() => setActiveCaseId(null)}
+            className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
+              !activeCaseId
+                ? 'bg-gray-800 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            Rede completa
+          </button>
+          {cases.map(c => (
+            <button
+              key={c.id}
+              onClick={() => setActiveCaseId(c.id)}
+              className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
+                activeCaseId === c.id
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+              }`}
+            >
+              {c.name}
+              <span className="ml-1.5 opacity-60">({c.investigation_count})</span>
+            </button>
+          ))}
+          <button
+            onClick={() => setShowNewCaseModal(true)}
+            className="px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap border border-dashed border-gray-300 text-gray-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors"
+          >
+            + Novo caso
+          </button>
+        </div>
       </header>
 
+      {/* ── Main content ── */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
         {noInvestigations ? (
           <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
             <p className="text-4xl mb-4">🕸️</p>
-            <p className="text-gray-600 font-medium">Nenhuma investigação concluída ainda.</p>
-            <p className="text-gray-400 text-sm mt-1">Realize investigações para que os nós apareçam na rede.</p>
-            <Link to="/investigacoes/nova" className="mt-4 inline-block text-blue-600 hover:underline text-sm">
-              + Nova investigação
-            </Link>
+            {activeCaseId ? (
+              <>
+                <p className="text-gray-600 font-medium">Nenhuma investigação neste caso.</p>
+                <p className="text-gray-400 text-sm mt-1">Adicione investigações pelo botão "Gerenciar caso".</p>
+                <button
+                  onClick={() => { setManagingCase(activeCase!); setRenamingCase(false); setRenameValue(activeCase!.name) }}
+                  className="mt-4 inline-block text-indigo-600 hover:underline text-sm"
+                >
+                  ⚙ Gerenciar caso
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-gray-600 font-medium">Nenhuma investigação concluída ainda.</p>
+                <p className="text-gray-400 text-sm mt-1">Realize investigações para que os nós apareçam na rede.</p>
+                <Link to="/investigacoes/nova" className="mt-4 inline-block text-blue-600 hover:underline text-sm">
+                  + Nova investigação
+                </Link>
+              </>
+            )}
           </div>
         ) : !hasAnyConnection ? (
           <div className="space-y-4">
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 text-sm text-blue-800">
               <strong>Nenhuma conexão identificada ainda.</strong>
               <span className="text-blue-600 ml-1">
-                Use "Vincular investigados" para registrar relações manuais (família, sócios, etc.),
-                ou continue investigando para detectar vínculos societários compartilhados.
+                Use "Vincular" para registrar relações manuais, ou continue investigando para detectar vínculos societários automáticos.
               </span>
             </div>
             <GraphCanvas nodes={nodes} edges={edges} positions={positions}
@@ -317,19 +477,17 @@ export default function Graph() {
               </span>
             ))}
             <span className="flex items-center gap-1.5">
-              <span className="w-5 h-3.5 rounded inline-block bg-gray-200 border border-gray-300" />
-              Empresa (QSA)
+              <span className="w-5 h-3.5 rounded inline-block bg-gray-200 border border-gray-300" />Empresa
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-3.5 h-3.5 rounded-full inline-block bg-blue-200 border border-blue-400" />
-              Sócio
+              <span className="w-3.5 h-3.5 rounded-full inline-block bg-blue-200 border border-blue-400" />Sócio
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
             <span className="font-semibold text-gray-600">Vínculos:</span>
             <span className="flex items-center gap-1.5">
               <svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" stroke="#d1d5db" strokeWidth="1.5" strokeDasharray="4 3"/></svg>
-              Societário (automático)
+              Societário (auto)
             </span>
             <span className="flex items-center gap-1.5">
               <svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" stroke="#f97316" strokeWidth="2.5"/></svg>
@@ -348,37 +506,190 @@ export default function Graph() {
         </div>
       </main>
 
-      {/* Link Modal */}
+      {/* ── New Case Modal ── */}
+      {showNewCaseModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
+            <h2 className="text-lg font-bold text-gray-900 mb-1">Novo Caso</h2>
+            <p className="text-sm text-gray-500 mb-4">Agrupe investigações relacionadas em um caso de análise.</p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Nome do caso</label>
+                <input
+                  autoFocus
+                  type="text"
+                  value={newCaseName}
+                  onChange={e => setNewCaseName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleCreateCase()}
+                  placeholder="Ex: Operação Alpha, Família Silva, Fraude X"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Descrição <span className="text-gray-400 font-normal">(opcional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={newCaseDesc}
+                  onChange={e => setNewCaseDesc(e.target.value)}
+                  placeholder="Notas sobre este caso..."
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={() => { setShowNewCaseModal(false); setNewCaseName(''); setNewCaseDesc('') }}
+                className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-2.5 text-sm font-semibold hover:bg-gray-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleCreateCase}
+                disabled={!newCaseName.trim() || caseLoading}
+                className="flex-1 bg-indigo-600 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+              >
+                {caseLoading ? 'Criando...' : 'Criar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Manage Case Modal ── */}
+      {managingCase && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg max-h-[85vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex-1">
+                {renamingCase ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      autoFocus
+                      type="text"
+                      value={renameValue}
+                      onChange={e => setRenameValue(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleRenameCase(); if (e.key === 'Escape') setRenamingCase(false) }}
+                      className="text-lg font-bold border-b-2 border-indigo-500 outline-none bg-transparent w-full"
+                    />
+                    <button onClick={handleRenameCase} className="text-xs text-indigo-600 font-semibold hover:underline shrink-0">Salvar</button>
+                    <button onClick={() => setRenamingCase(false)} className="text-xs text-gray-400 hover:text-gray-600 shrink-0">✕</button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-bold text-gray-900">{managingCase.name}</h2>
+                    <button
+                      onClick={() => { setRenamingCase(true); setRenameValue(managingCase.name) }}
+                      className="text-xs text-gray-400 hover:text-gray-600"
+                      title="Renomear"
+                    >
+                      ✏
+                    </button>
+                  </div>
+                )}
+                {managingCase.description && (
+                  <p className="text-sm text-gray-500 mt-0.5">{managingCase.description}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Investigations in case */}
+            <div className="flex-1 overflow-y-auto space-y-2 mb-4">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                Investigados no caso ({managingCase.investigation_count})
+              </p>
+              {managingCase.investigation_ids.length === 0 ? (
+                <p className="text-sm text-gray-400 italic py-2">Nenhum investigado adicionado.</p>
+              ) : (
+                managingCase.investigation_ids.map(invId => {
+                  const inv = allInvestigations.find(i => i.id === invId)
+                  const name = inv?.entity_name || inv?.nickname || inv?.entity_id || invId
+                  return (
+                    <div key={invId} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                      <div>
+                        <span className="text-sm font-medium text-gray-800">{name}</span>
+                        {inv?.risk_level && (
+                          <span className={`ml-2 text-xs font-semibold px-1.5 py-0.5 rounded ${
+                            inv.risk_level === 'critical' ? 'bg-red-100 text-red-700' :
+                            inv.risk_level === 'high' ? 'bg-orange-100 text-orange-700' :
+                            inv.risk_level === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-green-100 text-green-700'
+                          }`}>{inv.risk_score != null ? Math.round(inv.risk_score) : '—'}</span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => handleRemoveInv(invId)}
+                        className="text-xs text-red-400 hover:text-red-600 ml-3"
+                        title="Remover do caso"
+                      >✕</button>
+                    </div>
+                  )
+                })
+              )}
+
+              {/* Add investigation dropdown */}
+              {invNotInCase.length > 0 && (
+                <div className="pt-2">
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                    Adicionar investigado
+                  </label>
+                  <select
+                    defaultValue=""
+                    onChange={e => { if (e.target.value) { handleAddInv(e.target.value); e.target.value = '' } }}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">Selecionar investigação para adicionar...</option>
+                    {invNotInCase.map(inv => (
+                      <option key={inv.id} value={inv.id}>
+                        {inv.entity_name || inv.nickname || inv.entity_id || inv.id}
+                        {inv.risk_score != null ? ` — score ${Math.round(inv.risk_score)}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+              <button
+                onClick={() => handleDeleteCase(managingCase.id)}
+                className="text-xs text-red-500 hover:text-red-700 font-semibold"
+              >
+                Excluir caso
+              </button>
+              <button
+                onClick={() => setManagingCase(null)}
+                className="bg-gray-800 text-white rounded-lg px-5 py-2 text-sm font-semibold hover:bg-gray-900 transition-colors"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Link Modal ── */}
       {showLinkModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md">
             <h2 className="text-lg font-bold text-gray-900 mb-1">Vincular Investigados</h2>
-            <p className="text-sm text-gray-500 mb-5">
-              Registre uma relação confirmada entre dois investigados da rede.
-            </p>
-
+            <p className="text-sm text-gray-500 mb-5">Registre uma relação confirmada entre dois investigados.</p>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Investigado A</label>
-                <select
-                  value={linkNodeA}
-                  onChange={e => { setLinkNodeA(e.target.value); setLinkNodeB('') }}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
+                <select value={linkNodeA} onChange={e => { setLinkNodeA(e.target.value); setLinkNodeB('') }}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                   <option value="">Selecionar investigado...</option>
-                  {subjects.map(n => (
-                    <option key={n.id} value={n.id}>{n.label}</option>
-                  ))}
+                  {subjects.map(n => <option key={n.id} value={n.id}>{n.label}</option>)}
                 </select>
               </div>
-
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Tipo de Relação</label>
-                <select
-                  value={linkRelType}
-                  onChange={e => setLinkRelType(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
+                <select value={linkRelType} onChange={e => setLinkRelType(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                   <optgroup label="Familiar">
                     {RELATIONSHIP_OPTIONS.filter(o => FAMILY_TYPES.has(o.value)).map(o => (
                       <option key={o.value} value={o.value}>{o.label}</option>
@@ -392,37 +703,26 @@ export default function Graph() {
                   </optgroup>
                 </select>
               </div>
-
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Investigado B</label>
-                <select
-                  value={linkNodeB}
-                  onChange={e => setLinkNodeB(e.target.value)}
+                <select value={linkNodeB} onChange={e => setLinkNodeB(e.target.value)}
                   disabled={!linkNodeA}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-400"
-                >
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-400">
                   <option value="">Selecionar investigado...</option>
                   {subjects.filter(n => n.id !== linkNodeA).map(n => (
                     <option key={n.id} value={n.id}>{n.label}</option>
                   ))}
                 </select>
               </div>
-
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">
                   Observação <span className="text-gray-400 font-normal">(opcional)</span>
                 </label>
-                <input
-                  type="text"
-                  value={linkCustomLabel}
-                  onChange={e => setLinkCustomLabel(e.target.value)}
+                <input type="text" value={linkCustomLabel} onChange={e => setLinkCustomLabel(e.target.value)}
                   placeholder={`Ex: ${RELATIONSHIP_OPTIONS.find(o => o.value === linkRelType)?.label} confirmado em processo`}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-                <p className="text-xs text-gray-400 mt-1">Se não preenchido, usa o tipo de relação como rótulo.</p>
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
               </div>
             </div>
-
             {linkNodeA && linkNodeB && (
               <div className="mt-4 bg-indigo-50 rounded-lg px-3 py-2.5 text-xs text-indigo-700">
                 <strong>{subjects.find(n => n.id === linkNodeA)?.label}</strong>
@@ -430,23 +730,14 @@ export default function Graph() {
                 {' '}↔ <strong>{subjects.find(n => n.id === linkNodeB)?.label}</strong>
               </div>
             )}
-
             <div className="flex gap-3 mt-5">
-              <button
-                onClick={() => {
-                  setShowLinkModal(false)
-                  setLinkNodeA(''); setLinkNodeB(''); setLinkRelType('cônjuge'); setLinkCustomLabel('')
-                }}
-                className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-2.5 text-sm font-semibold hover:bg-gray-50 transition-colors"
-              >
+              <button onClick={() => { setShowLinkModal(false); setLinkNodeA(''); setLinkNodeB(''); setLinkRelType('cônjuge'); setLinkCustomLabel('') }}
+                className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-2.5 text-sm font-semibold hover:bg-gray-50 transition-colors">
                 Cancelar
               </button>
-              <button
-                onClick={handleLink}
-                disabled={!linkNodeA || !linkNodeB || linkLoading}
-                className="flex-1 bg-indigo-600 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-              >
-                {linkLoading ? 'Criando vínculo...' : 'Criar Vínculo'}
+              <button onClick={handleLink} disabled={!linkNodeA || !linkNodeB || linkLoading}
+                className="flex-1 bg-indigo-600 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors">
+                {linkLoading ? 'Criando...' : 'Criar Vínculo'}
               </button>
             </div>
           </div>
@@ -457,86 +748,47 @@ export default function Graph() {
 }
 
 function GraphCanvas({ nodes, edges, positions, hovered, hoveredConnected, hoveredEdge, setHovered, setHoveredEdge, navigate, onDeleteEdge }: {
-  nodes: GraphNodeOut[]
-  edges: GraphEdgeOut[]
-  positions: Pos
-  hovered: string | null
-  hoveredConnected: Set<string>
-  hoveredEdge: string | null
-  setHovered: (id: string | null) => void
-  setHoveredEdge: (id: string | null) => void
-  navigate: ReturnType<typeof useNavigate>
-  onDeleteEdge: (id: string) => void
+  nodes: GraphNodeOut[]; edges: GraphEdgeOut[]; positions: Pos
+  hovered: string | null; hoveredConnected: Set<string>; hoveredEdge: string | null
+  setHovered: (id: string | null) => void; setHoveredEdge: (id: string | null) => void
+  navigate: ReturnType<typeof useNavigate>; onDeleteEdge: (id: string) => void
 }) {
   if (Object.keys(positions).length === 0) return null
-
   const edgeIsHighlighted = (e: GraphEdgeOut) =>
     hovered !== null && (e.source_id === hovered || e.target_id === hovered)
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        className="w-full"
-        style={{ maxHeight: '60vh' }}
-      >
-        {/* Edges rendered before nodes so nodes sit on top */}
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: '60vh' }}>
         {edges.map(e => {
           const a = positions[e.source_id], b = positions[e.target_id]
           if (!a || !b) return null
-
           const highlighted = edgeIsHighlighted(e)
           const dimmed = hovered !== null && !highlighted
           const isEdgeHovered = hoveredEdge === e.id
           const relType = e.relationship_type || 'auto'
           const isAuto = relType === 'auto'
           const isManual = e.is_manual
-
           const edgeColor = getEdgeColor(relType, highlighted)
-          const strokeWidth = isAuto
-            ? (highlighted ? 2 : 1)
-            : FAMILY_TYPES.has(relType) ? 2.5 : 2
-          const dashArray = isAuto && !highlighted ? '4 3' : undefined
-          const strokeOpacity = dimmed ? 0.15 : 1
-
-          const mx = (a.x + b.x) / 2
-          const my = (a.y + b.y) / 2
+          const strokeWidth = isAuto ? (highlighted ? 2 : 1) : FAMILY_TYPES.has(relType) ? 2.5 : 2
+          const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2
 
           return (
-            <g key={e.id}
-              onMouseEnter={() => setHoveredEdge(e.id)}
-              onMouseLeave={() => setHoveredEdge(null)}
-            >
-              {/* Wide invisible hit area for easy hovering */}
+            <g key={e.id} onMouseEnter={() => setHoveredEdge(e.id)} onMouseLeave={() => setHoveredEdge(null)}>
               <line x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                stroke="transparent" strokeWidth={14}
-                style={{ cursor: isManual ? 'pointer' : 'default' }} />
-              {/* Visible edge line */}
-              <line
-                x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                stroke={edgeColor}
-                strokeWidth={strokeWidth}
-                strokeOpacity={strokeOpacity}
-                strokeDasharray={dashArray}
-              />
-              {/* Label: always visible for manual edges; hover-only for auto */}
+                stroke="transparent" strokeWidth={14} style={{ cursor: isManual ? 'pointer' : 'default' }} />
+              <line x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+                stroke={edgeColor} strokeWidth={strokeWidth}
+                strokeOpacity={dimmed ? 0.15 : 1}
+                strokeDasharray={isAuto && !highlighted ? '4 3' : undefined} />
               {(highlighted || (isManual && !dimmed)) && (
-                <text
-                  x={mx} y={my - 7}
-                  textAnchor="middle" fontSize={9}
-                  fill={edgeColor} fontWeight="600"
-                  opacity={isEdgeHovered || highlighted ? 1 : 0.65}
-                >
+                <text x={mx} y={my - 7} textAnchor="middle" fontSize={9}
+                  fill={edgeColor} fontWeight="600" opacity={isEdgeHovered || highlighted ? 1 : 0.65}>
                   {e.label}
                 </text>
               )}
-              {/* Delete button — only on hover for manual edges */}
               {isManual && isEdgeHovered && (
-                <g
-                  transform={`translate(${mx}, ${my + 8})`}
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => onDeleteEdge(e.id)}
-                >
+                <g transform={`translate(${mx}, ${my + 8})`} style={{ cursor: 'pointer' }} onClick={() => onDeleteEdge(e.id)}>
                   <circle r={8} fill="white" stroke="#ef4444" strokeWidth={1.5} />
                   <text textAnchor="middle" y={4} fontSize={9} fill="#ef4444" fontWeight="bold">✕</text>
                 </g>
@@ -544,24 +796,17 @@ function GraphCanvas({ nodes, edges, positions, hovered, hoveredConnected, hover
             </g>
           )
         })}
-
-        {/* Nodes */}
         {nodes.map(n => {
           const pos = positions[n.id]
           if (!pos) return null
           const isHovered = hovered === n.id
           const isConnected = hoveredConnected.has(n.id)
           const dimmed = hovered !== null && !isHovered && !isConnected
-
           return (
             <g key={n.id} opacity={dimmed ? 0.25 : 1}>
-              <NodeShape
-                node={n}
-                pos={pos}
-                hovered={isHovered || isConnected}
+              <NodeShape node={n} pos={pos} hovered={isHovered || isConnected}
                 onHover={setHovered}
-                onClick={() => n.investigation_id && navigate(`/investigacoes/${n.investigation_id}/relatorio`)}
-              />
+                onClick={() => n.investigation_id && navigate(`/investigacoes/${n.investigation_id}/relatorio`)} />
             </g>
           )
         })}

@@ -7,6 +7,8 @@ import type {
   GraphResponse,
   GraphEdgeOut,
   GraphEdgeCreate,
+  Case,
+  CaseCreate,
 } from '../types'
 
 const BASE_URL = '/api/v1'
@@ -66,8 +68,9 @@ export const api = {
     return request<InvestigationHistory>(`/investigations/${id}/history`)
   },
 
-  async getGraph(): Promise<GraphResponse> {
-    return request<GraphResponse>('/graph')
+  async getGraph(caseId?: string | null): Promise<GraphResponse> {
+    const url = caseId ? `/graph?case_id=${encodeURIComponent(caseId)}` : '/graph'
+    return request<GraphResponse>(url)
   },
 
   async createGraphEdge(data: GraphEdgeCreate): Promise<GraphEdgeOut> {
@@ -79,5 +82,29 @@ export const api = {
 
   async deleteGraphEdge(id: string): Promise<void> {
     return request<void>(`/graph/edges/${id}`, { method: 'DELETE' })
+  },
+
+  async listCases(): Promise<Case[]> {
+    return request<Case[]>('/cases')
+  },
+
+  async createCase(data: CaseCreate): Promise<Case> {
+    return request<Case>('/cases', { method: 'POST', body: JSON.stringify(data) })
+  },
+
+  async updateCase(id: string, data: { name?: string; description?: string }): Promise<Case> {
+    return request<Case>(`/cases/${id}`, { method: 'PUT', body: JSON.stringify(data) })
+  },
+
+  async deleteCase(id: string): Promise<void> {
+    return request<void>(`/cases/${id}`, { method: 'DELETE' })
+  },
+
+  async addInvestigationToCase(caseId: string, invId: string): Promise<void> {
+    return request<void>(`/cases/${caseId}/investigations/${invId}`, { method: 'POST' })
+  },
+
+  async removeInvestigationFromCase(caseId: string, invId: string): Promise<void> {
+    return request<void>(`/cases/${caseId}/investigations/${invId}`, { method: 'DELETE' })
   },
 }

@@ -122,3 +122,17 @@ export interface GraphResponse {
     shared_entities: number
   }
 }
+
+export interface Case {
+  id: string
+  name: string
+  description?: string | null
+  created_at: string
+  investigation_ids: string[]
+  investigation_count: number
+}
+
+export interface CaseCreate {
+  name: string
+  description?: string | null
+}
