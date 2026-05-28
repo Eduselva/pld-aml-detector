@@ -30,6 +30,7 @@ async def get_db():
 
 async def init_db():
     from app.models import investigation  # noqa: F401
+    from app.models import graph  # noqa: F401
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     # Add new columns if they don't exist (SQLite migration)
@@ -37,6 +38,16 @@ async def init_db():
         for col, col_type in [("phone", "VARCHAR(30)"), ("nickname", "VARCHAR(255)")]:
             try:
                 await conn.execute(text(f"ALTER TABLE investigations ADD COLUMN {col} {col_type}"))
+                await conn.commit()
+            except Exception:
+                pass  # Column already exists
+        # Graph tables — create via metadata; guard against pre-existing columns
+        for table, col, col_type in [
+            ("graph_nodes", "risk_level", "VARCHAR(20)"),
+            ("graph_nodes", "risk_score", "FLOAT"),
+        ]:
+            try:
+                await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"))
                 await conn.commit()
             except Exception:
                 pass  # Column already exists

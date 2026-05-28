@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import NewInvestigation from './pages/NewInvestigation'
 import Report from './pages/Report'
+import Graph from './pages/Graph'
 
 export default function App() {
   return (
@@ -11,6 +12,7 @@ export default function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/investigacoes/nova" element={<NewInvestigation />} />
         <Route path="/investigacoes/:id/relatorio" element={<Report />} />
+        <Route path="/grafo" element={<Graph />} />
       </Routes>
     </BrowserRouter>
   )

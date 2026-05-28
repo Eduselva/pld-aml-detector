@@ -103,8 +103,62 @@ class CourtRecordsSource(BaseSource):
         entity_id: Optional[str],
     ) -> list[dict]:
         processes: list[dict] = []
-        for term in search_terms[:1]:
+
+        # When entity_id (CPF/CNPJ) is available, use it as the must clause for precision
+        if entity_id and len(entity_id) in (11, 14):
             query: dict = {
+                "query": {
+                    "bool": {
+                        "must": [
+                            {"match": {"partes.cpfCnpj": entity_id}},
+                        ],
+                        "should": [
+                            {"match": {"partes.nome": term}}
+                            for term in search_terms[:1]
+                            if term
+                        ],
+                    }
+                },
+                "size": 10,
+                "_source": [
+                    "numero", "classe", "tribunal", "dataAjuizamento",
+                    "partes", "assuntos", "movimentos",
+                ],
+            }
+            try:
+                resp = await client.post(
+                    f"{DATAJUD_BASE}/api_publica_{court}/_search",
+                    json=query,
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    hits = data.get("hits", {}).get("hits", [])
+                    for hit in hits:
+                        src = hit.get("_source", {})
+                        assuntos = src.get("assuntos", [])
+                        classe = src.get("classe", {})
+                        processes.append({
+                            "numero": src.get("numero", ""),
+                            "tribunal": court.upper(),
+                            "classe": classe.get("nome", "") if isinstance(classe, dict) else str(classe),
+                            "data_ajuizamento": src.get("dataAjuizamento", ""),
+                            "assuntos": [
+                                a.get("nome", "") if isinstance(a, dict) else str(a)
+                                for a in assuntos[:3]
+                            ],
+                            "url": f"https://www.cnj.jus.br/busca-ativa-de-processos/{src.get('numero', '')}",
+                        })
+                elif resp.status_code == 401:
+                    logger.warning(f"DataJud {court}: chave inválida")
+                else:
+                    logger.debug(f"DataJud {court}: HTTP {resp.status_code}")
+            except Exception as e:
+                logger.debug(f"DataJud {court} falhou: {e}")
+            return processes
+
+        # No entity_id — fall back to name-only search
+        for term in search_terms[:1]:
+            query = {
                 "query": {
                     "bool": {
                         "should": [
@@ -119,10 +173,6 @@ class CourtRecordsSource(BaseSource):
                     "partes", "assuntos", "movimentos",
                 ],
             }
-            if entity_id and len(entity_id) in (11, 14):
-                query["query"]["bool"]["should"].append(
-                    {"match": {"partes.cpfCnpj": entity_id}}
-                )
 
             try:
                 resp = await client.post(

@@ -85,3 +85,31 @@ export interface DossierReport {
   alerts: Alert[]
   sources: SourceFinding[]
 }
+
+export interface GraphNodeOut {
+  id: string
+  type: string
+  label: string
+  value: string
+  investigation_id?: string | null
+  risk_level?: string | null
+  risk_score?: number | null
+}
+
+export interface GraphEdgeOut {
+  id: string
+  source_id: string
+  target_id: string
+  label: string
+}
+
+export interface GraphResponse {
+  nodes: GraphNodeOut[]
+  edges: GraphEdgeOut[]
+  stats: {
+    subjects: number
+    companies: number
+    partners: number
+    shared_entities: number
+  }
+}

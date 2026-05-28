@@ -54,3 +54,33 @@ class HistoryEntry(BaseModel):
 
 class InvestigationHistory(BaseModel):
     entries: list[HistoryEntry]  # all investigations for same entity, newest first (includes current)
+
+
+class GraphNodeOut(BaseModel):
+    id: str
+    type: str
+    label: str
+    value: str
+    investigation_id: Optional[str] = None
+    risk_level: Optional[str] = None
+    risk_score: Optional[float] = None
+
+
+class GraphEdgeOut(BaseModel):
+    id: str
+    source_id: str
+    target_id: str
+    label: str
+
+
+class GraphStats(BaseModel):
+    subjects: int
+    companies: int
+    partners: int
+    shared_entities: int
+
+
+class GraphResponse(BaseModel):
+    nodes: list[GraphNodeOut]
+    edges: list[GraphEdgeOut]
+    stats: GraphStats

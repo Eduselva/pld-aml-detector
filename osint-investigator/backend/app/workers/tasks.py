@@ -129,6 +129,15 @@ async def _run_investigation_async(investigation_id: str):
         await db.commit()
         logger.info(f"Investigation {investigation_id} complete. Score: {total_score:.1f} ({risk_level})")
 
+    # Build graph data after investigation is fully committed
+    await _extract_graph_data(
+        investigation_id=investigation_id,
+        entity_name=entity_name,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        source_findings={name: findings for name, findings, _ in results if findings},
+    )
+
 
 def _build_source_tasks(entity_name: str, entity_type: str, entity_id: str, email: Optional[str], nickname: Optional[str] = None, phone: Optional[str] = None):
     """Build list of (source_name, coroutine) tuples."""
@@ -197,3 +206,114 @@ async def _empty_source(source_name: str) -> dict:
         "alerts": [],
         "data": {},
     }
+
+
+async def _extract_graph_data(
+    investigation_id: str,
+    entity_name: Optional[str],
+    entity_type: str,
+    entity_id: Optional[str],
+    source_findings: dict,
+) -> None:
+    """Build/upsert graph nodes and edges from investigation results."""
+    try:
+        import uuid as _uuid
+        import unicodedata
+        import re
+        from app.database import AsyncSessionLocal
+        from app.models.graph import GraphNode, GraphEdge
+        from app.models.investigation import Investigation
+        from sqlalchemy import select
+
+        def _norm(s: str) -> str:
+            nfkd = unicodedata.normalize("NFKD", s)
+            ascii_s = "".join(c for c in nfkd if not unicodedata.combining(c))
+            return re.sub(r"\s+", " ", ascii_s).strip().upper()
+
+        async with AsyncSessionLocal() as db:
+            # Fetch final risk info for subject node
+            inv_res = await db.execute(select(Investigation).where(Investigation.id == investigation_id))
+            inv = inv_res.scalar_one_or_none()
+            risk_level = inv.risk_level if inv else None
+            risk_score = inv.risk_score if inv else None
+
+            # Determine subject value and label
+            subject_value = entity_id if entity_id else _norm(entity_name or investigation_id)
+            subject_label = entity_name or entity_id or investigation_id
+
+            async def upsert_node(node_type: str, value: str, label: str, inv_id=None, r_level=None, r_score=None) -> str:
+                res = await db.execute(
+                    select(GraphNode).where(GraphNode.type == node_type, GraphNode.value == value)
+                )
+                node = res.scalar_one_or_none()
+                if node:
+                    # Update label/risk if this is the subject node
+                    if inv_id:
+                        node.investigation_id = inv_id
+                    if r_level:
+                        node.risk_level = r_level
+                    if r_score is not None:
+                        node.risk_score = r_score
+                    return node.id
+                new_node = GraphNode(
+                    id=str(_uuid.uuid4()),
+                    type=node_type,
+                    value=value,
+                    label=label,
+                    investigation_id=inv_id,
+                    risk_level=r_level,
+                    risk_score=r_score,
+                )
+                db.add(new_node)
+                await db.flush()
+                return new_node.id
+
+            async def ensure_edge(source_id: str, target_id: str, label: str):
+                res = await db.execute(
+                    select(GraphEdge).where(
+                        GraphEdge.source_id == source_id,
+                        GraphEdge.target_id == target_id,
+                        GraphEdge.label == label,
+                    )
+                )
+                if res.scalar_one_or_none() is None:
+                    db.add(GraphEdge(
+                        id=str(_uuid.uuid4()),
+                        source_id=source_id,
+                        target_id=target_id,
+                        label=label,
+                    ))
+
+            subject_id = await upsert_node(
+                "subject", subject_value, subject_label,
+                inv_id=investigation_id, r_level=risk_level, r_score=risk_score,
+            )
+
+            # QSA findings → company nodes
+            qsa_data = source_findings.get("qsa_search", {})
+            if isinstance(qsa_data, dict):
+                companies = qsa_data.get("data", {}).get("companies", [])
+                for company in companies:
+                    cnpj = company.get("cnpj", "").replace(".", "").replace("/", "").replace("-", "").strip()
+                    razao = company.get("razao_social", "") or cnpj
+                    if not cnpj:
+                        continue
+                    company_node_id = await upsert_node("company", cnpj, razao)
+                    await ensure_edge(subject_id, company_node_id, "QSA")
+
+            # CNPJ findings → partner nodes
+            cnpj_data = source_findings.get("cnpj", {})
+            if isinstance(cnpj_data, dict):
+                socios = cnpj_data.get("data", {}).get("socios", [])
+                for socio in socios:
+                    nome = socio.get("nome", "").strip()
+                    if not nome:
+                        continue
+                    norm_nome = _norm(nome)
+                    partner_node_id = await upsert_node("partner", norm_nome, nome)
+                    await ensure_edge(subject_id, partner_node_id, "Sócio")
+
+            await db.commit()
+
+    except Exception:
+        logger.exception(f"_extract_graph_data failed for {investigation_id} (non-fatal)")

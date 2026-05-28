@@ -8,7 +8,7 @@ from sqlalchemy import select, desc
 from app.database import get_db
 from app.models.investigation import Investigation, SourceResult
 from app.schemas.investigation import InvestigationCreate, InvestigationResponse, InvestigationListResponse
-from app.schemas.report import DossierReport, RiskScore, SourceFinding, Alert, HistoryEntry, InvestigationHistory
+from app.schemas.report import DossierReport, RiskScore, SourceFinding, Alert, HistoryEntry, InvestigationHistory, GraphNodeOut, GraphEdgeOut, GraphStats, GraphResponse
 
 router = APIRouter(prefix="/api/v1", tags=["investigations"])
 
@@ -245,6 +245,45 @@ async def get_history(
         ))
 
     return InvestigationHistory(entries=entries)
+
+
+@router.get("/graph", response_model=GraphResponse)
+async def get_graph(db: AsyncSession = Depends(get_db)):
+    from app.models.graph import GraphNode, GraphEdge
+    from collections import defaultdict
+
+    nodes_result = await db.execute(select(GraphNode))
+    nodes = nodes_result.scalars().all()
+
+    edges_result = await db.execute(select(GraphEdge))
+    edges = edges_result.scalars().all()
+
+    # Compute shared_entities: non-subject nodes connected to 2+ distinct subject nodes
+    subject_ids = {n.id for n in nodes if n.type == "subject"}
+    node_to_subjects: dict[str, set[str]] = defaultdict(set)
+    for edge in edges:
+        if edge.source_id in subject_ids:
+            node_to_subjects[edge.target_id].add(edge.source_id)
+    shared_entities = sum(1 for subjects in node_to_subjects.values() if len(subjects) >= 2)
+
+    stats = GraphStats(
+        subjects=sum(1 for n in nodes if n.type == "subject"),
+        companies=sum(1 for n in nodes if n.type == "company"),
+        partners=sum(1 for n in nodes if n.type == "partner"),
+        shared_entities=shared_entities,
+    )
+
+    return GraphResponse(
+        nodes=[GraphNodeOut(
+            id=n.id, type=n.type, label=n.label, value=n.value,
+            investigation_id=n.investigation_id,
+            risk_level=n.risk_level, risk_score=n.risk_score,
+        ) for n in nodes],
+        edges=[GraphEdgeOut(
+            id=e.id, source_id=e.source_id, target_id=e.target_id, label=e.label,
+        ) for e in edges],
+        stats=stats,
+    )
 
 
 @router.delete("/investigations/{investigation_id}", status_code=status.HTTP_204_NO_CONTENT)

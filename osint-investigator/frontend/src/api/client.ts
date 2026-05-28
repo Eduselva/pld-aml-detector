@@ -4,6 +4,7 @@ import type {
   InvestigationListResponse,
   DossierReport,
   InvestigationHistory,
+  GraphResponse,
 } from '../types'
 
 const BASE_URL = '/api/v1'
@@ -61,5 +62,9 @@ export const api = {
 
   async getHistory(id: string): Promise<InvestigationHistory> {
     return request<InvestigationHistory>(`/investigations/${id}/history`)
+  },
+
+  async getGraph(): Promise<GraphResponse> {
+    return request<GraphResponse>('/graph')
   },
 }
