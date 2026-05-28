@@ -101,6 +101,15 @@ export interface GraphEdgeOut {
   source_id: string
   target_id: string
   label: string
+  relationship_type: string
+  is_manual: boolean
+}
+
+export interface GraphEdgeCreate {
+  source_node_id: string
+  target_node_id: string
+  relationship_type: string
+  label: string
 }
 
 export interface GraphResponse {

@@ -71,6 +71,15 @@ class GraphEdgeOut(BaseModel):
     source_id: str
     target_id: str
     label: str
+    relationship_type: str = "auto"
+    is_manual: bool = False
+
+
+class GraphEdgeCreate(BaseModel):
+    source_node_id: str
+    target_node_id: str
+    relationship_type: str
+    label: str
 
 
 class GraphStats(BaseModel):

@@ -5,6 +5,8 @@ import type {
   DossierReport,
   InvestigationHistory,
   GraphResponse,
+  GraphEdgeOut,
+  GraphEdgeCreate,
 } from '../types'
 
 const BASE_URL = '/api/v1'
@@ -66,5 +68,16 @@ export const api = {
 
   async getGraph(): Promise<GraphResponse> {
     return request<GraphResponse>('/graph')
+  },
+
+  async createGraphEdge(data: GraphEdgeCreate): Promise<GraphEdgeOut> {
+    return request<GraphEdgeOut>('/graph/edges', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+
+  async deleteGraphEdge(id: string): Promise<void> {
+    return request<void>(`/graph/edges/${id}`, { method: 'DELETE' })
   },
 }

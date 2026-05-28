@@ -1,6 +1,6 @@
 import uuid
 from typing import Optional
-from sqlalchemy import String, Float, ForeignKey
+from sqlalchemy import String, Float, ForeignKey, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
@@ -28,3 +28,10 @@ class GraphEdge(Base):
     source_id: Mapped[str] = mapped_column(String(36), ForeignKey("graph_nodes.id"))
     target_id: Mapped[str] = mapped_column(String(36), ForeignKey("graph_nodes.id"))
     label: Mapped[str] = mapped_column(String(100))
+    # "auto" = detected via shared entity; others = manual relationship types
+    relationship_type: Mapped[str] = mapped_column(
+        String(50), default="auto", server_default="auto"
+    )
+    is_manual: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0"
+    )

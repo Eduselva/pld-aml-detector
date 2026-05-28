@@ -45,6 +45,8 @@ async def init_db():
         for table, col, col_type in [
             ("graph_nodes", "risk_level", "VARCHAR(20)"),
             ("graph_nodes", "risk_score", "FLOAT"),
+            ("graph_edges", "relationship_type", "VARCHAR(50) DEFAULT 'auto'"),
+            ("graph_edges", "is_manual", "BOOLEAN DEFAULT 0"),
         ]:
             try:
                 await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"))

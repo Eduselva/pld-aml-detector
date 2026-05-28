@@ -8,7 +8,7 @@ from sqlalchemy import select, desc
 from app.database import get_db
 from app.models.investigation import Investigation, SourceResult
 from app.schemas.investigation import InvestigationCreate, InvestigationResponse, InvestigationListResponse
-from app.schemas.report import DossierReport, RiskScore, SourceFinding, Alert, HistoryEntry, InvestigationHistory, GraphNodeOut, GraphEdgeOut, GraphStats, GraphResponse
+from app.schemas.report import DossierReport, RiskScore, SourceFinding, Alert, HistoryEntry, InvestigationHistory, GraphNodeOut, GraphEdgeOut, GraphEdgeCreate, GraphStats, GraphResponse
 
 router = APIRouter(prefix="/api/v1", tags=["investigations"])
 
@@ -281,9 +281,61 @@ async def get_graph(db: AsyncSession = Depends(get_db)):
         ) for n in nodes],
         edges=[GraphEdgeOut(
             id=e.id, source_id=e.source_id, target_id=e.target_id, label=e.label,
+            relationship_type=e.relationship_type or "auto",
+            is_manual=bool(e.is_manual),
         ) for e in edges],
         stats=stats,
     )
+
+
+@router.post("/graph/edges", response_model=GraphEdgeOut, status_code=status.HTTP_201_CREATED)
+async def create_graph_edge(
+    payload: GraphEdgeCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.graph import GraphNode, GraphEdge
+
+    src = await db.get(GraphNode, payload.source_node_id)
+    tgt = await db.get(GraphNode, payload.target_node_id)
+    if not src or not tgt:
+        raise HTTPException(status_code=404, detail="Nó não encontrado")
+
+    edge = GraphEdge(
+        id=str(uuid.uuid4()),
+        source_id=payload.source_node_id,
+        target_id=payload.target_node_id,
+        label=payload.label,
+        relationship_type=payload.relationship_type,
+        is_manual=True,
+    )
+    db.add(edge)
+    await db.commit()
+    await db.refresh(edge)
+
+    return GraphEdgeOut(
+        id=edge.id,
+        source_id=edge.source_id,
+        target_id=edge.target_id,
+        label=edge.label,
+        relationship_type=edge.relationship_type,
+        is_manual=True,
+    )
+
+
+@router.delete("/graph/edges/{edge_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_graph_edge(
+    edge_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.graph import GraphEdge
+
+    edge = await db.get(GraphEdge, edge_id)
+    if not edge:
+        raise HTTPException(status_code=404, detail="Aresta não encontrada")
+    if not edge.is_manual:
+        raise HTTPException(status_code=400, detail="Apenas conexões manuais podem ser removidas")
+    await db.delete(edge)
+    await db.commit()
 
 
 @router.delete("/investigations/{investigation_id}", status_code=status.HTTP_204_NO_CONTENT)
